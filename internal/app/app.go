@@ -20,6 +20,12 @@ type Scene interface {
 	DebugInfo() string
 }
 
+// SceneDebugger is an optional interface that scenes can implement to draw debug visuals.
+type SceneDebugger interface {
+	// DrawDebug draws debug visuals on top of the scene.
+	DrawDebug(screen *ebiten.Image)
+}
+
 // App is the main application struct that implements ebiten.Game.
 type App struct {
 	scene       Scene
@@ -100,6 +106,13 @@ func (a *App) Run() error {
 
 // drawDebugOverlay renders the debug information overlay.
 func (a *App) drawDebugOverlay(screen *ebiten.Image) {
+	// Draw scene debug visuals if available
+	if a.scene != nil {
+		if debugger, ok := a.scene.(SceneDebugger); ok {
+			debugger.DrawDebug(screen)
+		}
+	}
+
 	fps := ebiten.CurrentFPS()
 	tps := ebiten.CurrentTPS()
 	w, h := screen.Size()
