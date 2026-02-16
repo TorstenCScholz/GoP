@@ -48,15 +48,11 @@ func NewInput() *Input {
 func (i *Input) Pressed(action Action) bool {
 	keys, ok := i.keyMap[action]
 	if !ok {
-		println("[DEBUG INPUT] No keys mapped for action:", int(action))
 		return false
 	}
 
-	// DEBUG: Check each key
 	for _, key := range keys {
-		pressed := ebiten.IsKeyPressed(key)
-		if pressed {
-			println("[DEBUG INPUT] Key", int(key), "is pressed for action", int(action))
+		if ebiten.IsKeyPressed(key) {
 			return true
 		}
 	}

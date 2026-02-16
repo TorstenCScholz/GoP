@@ -144,8 +144,10 @@ func (c *CollisionMap) OverlapsSolid(x, y, w, h float64) bool {
 	// Get the tile range that the AABB overlaps
 	tx1 := int(x) / c.tileW
 	ty1 := int(y) / c.tileH
-	tx2 := (int(x) + int(w) + c.tileW - 1) / c.tileW
-	ty2 := (int(y) + int(h) + c.tileH - 1) / c.tileH
+	// Use floor division to avoid including tiles at exact boundaries
+	// Subtract a small epsilon to handle exact boundary cases
+	tx2 := int(x+w-0.001) / c.tileW
+	ty2 := int(y+h-0.001) / c.tileH
 
 	// Check each tile in the range
 	for ty := ty1; ty <= ty2; ty++ {
@@ -164,8 +166,9 @@ func (c *CollisionMap) OverlapsSolid(x, y, w, h float64) bool {
 func (c *CollisionMap) GetOverlappingTiles(x, y, w, h float64) []TileCoord {
 	tx1 := int(x) / c.tileW
 	ty1 := int(y) / c.tileH
-	tx2 := (int(x) + int(w) + c.tileW - 1) / c.tileW
-	ty2 := (int(y) + int(h) + c.tileH - 1) / c.tileH
+	// Use floor division to avoid including tiles at exact boundaries
+	tx2 := int(x+w-0.001) / c.tileW
+	ty2 := int(y+h-0.001) / c.tileH
 
 	var tiles []TileCoord
 	for ty := ty1; ty <= ty2; ty++ {

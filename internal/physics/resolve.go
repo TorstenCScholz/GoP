@@ -41,17 +41,12 @@ func (r *CollisionResolver) Resolve(body *Body, collisionMap *world.CollisionMap
 
 		// Check for collision after X movement
 		if collisionMap.OverlapsSolid(body.PosX, body.PosY, body.W, body.H) {
-			println("[DEBUG RESOLVE] X collision detected! dx=", dx, " PosX before snap=", body.PosX)
 			if dx > 0 {
 				// Moving right - snap to left edge of colliding tile
-				snapPos := r.snapLeft(body, collisionMap)
-				body.PosX = snapPos - body.W
-				println("[DEBUG RESOLVE] Moving right: snapLeft=", snapPos, " new PosX=", body.PosX)
+				body.PosX = r.snapLeft(body, collisionMap) - body.W
 			} else {
 				// Moving left - snap to right edge of colliding tile
-				snapPos := r.snapRight(body, collisionMap)
-				body.PosX = snapPos
-				println("[DEBUG RESOLVE] Moving left: snapRight=", snapPos, " new PosX=", body.PosX)
+				body.PosX = r.snapRight(body, collisionMap)
 			}
 			body.VelX = 0
 			actualDx = 0
@@ -69,18 +64,13 @@ func (r *CollisionResolver) Resolve(body *Body, collisionMap *world.CollisionMap
 
 		// Check for collision after Y movement
 		if collisionMap.OverlapsSolid(body.PosX, body.PosY, body.W, body.H) {
-			println("[DEBUG RESOLVE] Y collision detected! dy=", dy, " PosY before snap=", body.PosY)
 			if dy > 0 {
 				// Moving down - snap to top edge of colliding tile (landing)
-				snapPos := r.snapTop(body, collisionMap)
-				body.PosY = snapPos - body.H
+				body.PosY = r.snapTop(body, collisionMap) - body.H
 				body.OnGround = true
-				println("[DEBUG RESOLVE] Falling: snapTop=", snapPos, " body.H=", body.H, " new PosY=", body.PosY)
 			} else {
 				// Moving up - snap to bottom edge of colliding tile (ceiling)
-				snapPos := r.snapBottom(body, collisionMap)
-				body.PosY = snapPos
-				println("[DEBUG RESOLVE] Jumping: snapBottom=", snapPos, " new PosY=", body.PosY)
+				body.PosY = r.snapBottom(body, collisionMap)
 			}
 			body.VelY = 0
 			actualDy = 0
@@ -137,12 +127,9 @@ func (r *CollisionResolver) snapTop(body *Body, collisionMap *world.CollisionMap
 	tiles := collisionMap.GetOverlappingTiles(body.PosX, body.PosY, body.W, body.H)
 	minY := math.MaxFloat64
 
-	println("[DEBUG snapTop] Checking", len(tiles), "tiles for body at (", body.PosX, ",", body.PosY, ") size (", body.W, "x", body.H, ")")
 	for _, t := range tiles {
-		solid := collisionMap.IsSolidAtTile(t.X, t.Y)
-		tileTop := float64(t.Y * r.TileH)
-		println("[DEBUG snapTop] Tile (", t.X, ",", t.Y, ") top=", tileTop, " solid=", solid)
-		if solid {
+		if collisionMap.IsSolidAtTile(t.X, t.Y) {
+			tileTop := float64(t.Y * r.TileH)
 			if tileTop < minY {
 				minY = tileTop
 			}

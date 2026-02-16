@@ -31,23 +31,11 @@ func NewPlayerController(body *Body) *PlayerController {
 func (c *PlayerController) Update(inp *input.Input, collisionMap *world.CollisionMap, resolver *CollisionResolver, dt float64) {
 	// Horizontal movement - read left/right input and set horizontal velocity
 	c.Body.VelX = 0
-	
-	// DEBUG: Log input state
-	leftPressed := inp.Pressed(input.ActionMoveLeft)
-	rightPressed := inp.Pressed(input.ActionMoveRight)
-	jumpPressed := inp.JustPressed(input.ActionJump)
-	
-	if leftPressed || rightPressed || jumpPressed {
-		println("[DEBUG] Input: left=", leftPressed, " right=", rightPressed, " jump=", jumpPressed)
-	}
-	
-	if leftPressed {
+	if inp.Pressed(input.ActionMoveLeft) {
 		c.Body.VelX = -c.Speed
-		println("[DEBUG] Set VelX to", -c.Speed, "(moving left)")
 	}
-	if rightPressed {
+	if inp.Pressed(input.ActionMoveRight) {
 		c.Body.VelX = c.Speed
-		println("[DEBUG] Set VelX to", c.Speed, "(moving right)")
 	}
 
 	// Jump - only when grounded
@@ -67,15 +55,7 @@ func (c *PlayerController) Update(inp *input.Input, collisionMap *world.Collisio
 	// Calculate movement delta based on velocity and delta time
 	dx := c.Body.VelX * dt
 	dy := c.Body.VelY * dt
-	
-	if dx != 0 || dy != 0 {
-		println("[DEBUG] Before resolve: PosX=", c.Body.PosX, " PosY=", c.Body.PosY, " dx=", dx, " dy=", dy)
-	}
 
 	// Resolve collisions and move the body
 	resolver.Resolve(c.Body, collisionMap, dx, dy)
-	
-	if dx != 0 || dy != 0 {
-		println("[DEBUG] After resolve: PosX=", c.Body.PosX, " PosY=", c.Body.PosY)
-	}
 }
