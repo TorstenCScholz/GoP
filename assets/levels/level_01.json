@@ -78,10 +78,93 @@
       "width": 40,
       "x": 0,
       "y": 0
+    },
+    {
+      "draworder": "topdown",
+      "name": "Objects",
+      "objects": [
+        {
+          "id": 1,
+          "name": "PlayerSpawn",
+          "type": "spawn",
+          "x": 64,
+          "y": 320,
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": 2,
+          "name": "Hazard1",
+          "type": "hazard",
+          "x": 160,
+          "y": 336,
+          "width": 64,
+          "height": 16
+        },
+        {
+          "id": 3,
+          "name": "Hazard2",
+          "type": "hazard",
+          "x": 304,
+          "y": 208,
+          "width": 32,
+          "height": 16
+        },
+        {
+          "id": 4,
+          "name": "Checkpoint1",
+          "type": "checkpoint",
+          "x": 320,
+          "y": 288,
+          "width": 32,
+          "height": 64,
+          "properties": [
+            {"name": "id", "type": "string", "value": "cp1"}
+          ]
+        },
+        {
+          "id": 5,
+          "name": "Switch1",
+          "type": "switch",
+          "x": 448,
+          "y": 336,
+          "width": 32,
+          "height": 16,
+          "properties": [
+            {"name": "door_id", "type": "string", "value": "door1"}
+          ]
+        },
+        {
+          "id": 6,
+          "name": "Door1",
+          "type": "door",
+          "x": 544,
+          "y": 288,
+          "width": 32,
+          "height": 64,
+          "properties": [
+            {"name": "id", "type": "string", "value": "door1"}
+          ]
+        },
+        {
+          "id": 7,
+          "name": "Goal",
+          "type": "goal",
+          "x": 592,
+          "y": 288,
+          "width": 32,
+          "height": 64
+        }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
     }
   ],
-  "nextlayerid": 3,
-  "nextobjectid": 1,
+  "nextlayerid": 4,
+  "nextobjectid": 8,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.10.2",

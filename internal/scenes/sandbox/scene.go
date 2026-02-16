@@ -11,7 +11,9 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/torsten/GoP/internal/assets"
 	"github.com/torsten/GoP/internal/camera"
+	"github.com/torsten/GoP/internal/entities"
 	"github.com/torsten/GoP/internal/game"
+	"github.com/torsten/GoP/internal/gameplay"
 	"github.com/torsten/GoP/internal/gfx"
 	"github.com/torsten/GoP/internal/input"
 	"github.com/torsten/GoP/internal/physics"
@@ -39,10 +41,12 @@ type Scene struct {
 	// Input
 	inp *input.Input
 
-	// Map
+	// Map and entities
 	tileMap      *world.Map
 	renderer     *world.MapRenderer
 	collisionMap *world.CollisionMap
+	entityWorld  *entities.EntityWorld
+	levelData    []byte // Store raw level data for object parsing
 
 	// Camera (enhanced with deadzone)
 	camera *camera.Camera
@@ -51,6 +55,9 @@ type Scene struct {
 	playerBody       *physics.Body
 	playerController *physics.Controller
 	resolver         *physics.CollisionResolver
+
+	// Gameplay state
+	state *gameplay.StateMachine
 
 	// Tuning parameters
 	tuning game.Tuning
@@ -71,6 +78,10 @@ type Scene struct {
 	showDebugDeadzone  bool
 	showDebugState     bool
 	showDebugSteps     bool
+	showDebugEntities  bool
+
+	// Debug renderer
+	debugRenderer *entities.DebugRenderer
 
 	// Debug text
 	debugText string
@@ -79,11 +90,13 @@ type Scene struct {
 // New creates a new sandbox scene.
 func New() *Scene {
 	s := &Scene{
-		inp:      input.NewInput(),
-		width:    640,
-		height:   360,
-		tuning:   game.DefaultTuning(),
-		timestep: timestep.NewTimestep(),
+		inp:           input.NewInput(),
+		width:         640,
+		height:        360,
+		tuning:        game.DefaultTuning(),
+		timestep:      timestep.NewTimestep(),
+		state:         gameplay.NewStateMachine(),
+		debugRenderer: entities.NewDebugRenderer(),
 	}
 
 	// Load tileset image
@@ -94,11 +107,11 @@ func New() *Scene {
 	tileset := world.NewTilesetFromImage(tilesetImg, 16, 16)
 
 	// Load map data
-	levelData, err := assets.LoadLevelJSON()
+	s.levelData, err = assets.LoadLevelJSON()
 	if err != nil {
 		panic(fmt.Sprintf("failed to load level: %v", err))
 	}
-	mapData, err := world.ParseTiledJSON(levelData)
+	mapData, err := world.ParseTiledJSON(s.levelData)
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse level: %v", err))
 	}
@@ -119,6 +132,9 @@ func New() *Scene {
 	// Create collision map from "Collision" layer
 	s.collisionMap = world.NewCollisionMapFromMap(s.tileMap, "Collision")
 
+	// Create entity world
+	s.entityWorld = entities.NewEntityWorld()
+
 	// Create player
 	s.playerBody = &physics.Body{
 		PosX: 100,
@@ -129,12 +145,69 @@ func New() *Scene {
 	s.playerController = physics.NewController(s.playerBody, s.tuning)
 	s.resolver = physics.NewCollisionResolver(16, 16)
 
+	// Load entities from level
+	s.loadEntities()
+
 	// Load player sprite (reuse existing ball sprite)
 	if err := s.initSprite(); err != nil {
 		fmt.Printf("Failed to load sprite: %v\n", err)
 	}
 
 	return s
+}
+
+// loadEntities parses the level data and spawns entities.
+func (s *Scene) loadEntities() {
+	// Parse objects from level data
+	objects, err := world.ParseObjects(s.levelData)
+	if err != nil {
+		fmt.Printf("Failed to parse objects: %v\n", err)
+		return
+	}
+
+	// Find spawn point
+	if spawnX, spawnY, found := world.FindSpawnPoint(objects); found {
+		s.playerBody.PosX = spawnX
+		s.playerBody.PosY = spawnY
+		s.state.SetRespawnPoint(spawnX, spawnY)
+	}
+
+	// Create spawn context with callbacks
+	ctx := gameplay.SpawnContext{
+		OnDeath: func() {
+			s.state.TriggerDeath()
+		},
+		OnCheckpoint: func(id string, x, y float64) {
+			s.state.SetRespawnPoint(x, y)
+			fmt.Printf("Checkpoint '%s' activated at (%.0f, %.0f)\n", id, x, y)
+		},
+		OnGoalReached: func() {
+			s.state.TriggerComplete()
+			fmt.Println("Level Complete!")
+		},
+		GetDoor: func(id string) *entities.Door {
+			// Find door by ID in solid entities
+			for _, e := range s.entityWorld.SolidEntities() {
+				if door, ok := e.(*entities.Door); ok {
+					if door.GetID() == id {
+						return door
+					}
+				}
+			}
+			return nil
+		},
+	}
+
+	// Spawn entities
+	_, triggers, solidEnts := gameplay.SpawnEntities(objects, ctx)
+
+	// Add entities to world
+	for _, t := range triggers {
+		s.entityWorld.AddTrigger(t)
+	}
+	for _, e := range solidEnts {
+		s.entityWorld.AddSolidEntity(e)
+	}
 }
 
 // initSprite loads the spritesheet and creates the sprite animation.
@@ -167,6 +240,11 @@ func (s *Scene) initSprite() error {
 // FixedUpdate handles physics updates at fixed rate.
 // This is called multiple times per frame if needed.
 func (s *Scene) FixedUpdate() error {
+	// Skip physics during death/respawn/completed states
+	if !s.state.IsRunning() {
+		return nil
+	}
+
 	// Create collision function for the controller
 	collisionFunc := func(aabb physics.AABB) []physics.Collision {
 		return s.resolveCollisions(aabb)
@@ -174,6 +252,9 @@ func (s *Scene) FixedUpdate() error {
 
 	// Update player physics with fixed timestep
 	s.playerController.FixedUpdate(s.timestep.TickDuration(), s.inp, collisionFunc)
+
+	// Check triggers after movement
+	s.entityWorld.CheckTriggers(s.playerBody)
 
 	return nil
 }
@@ -251,12 +332,66 @@ func (s *Scene) resolveCollisions(aabb physics.AABB) []physics.Collision {
 		}
 	}
 
+	// Check solid entities (doors, etc.)
+	for _, e := range s.entityWorld.SolidEntities() {
+		entityBounds := e.Bounds()
+		if entityBounds.W == 0 || entityBounds.H == 0 {
+			// Skip entities with no collision (e.g., open doors)
+			continue
+		}
+
+		if aabb.Intersects(entityBounds) {
+			// Calculate collision normal
+			overlapLeft := (aabb.X + aabb.W) - entityBounds.X
+			overlapRight := (entityBounds.X + entityBounds.W) - aabb.X
+			overlapTop := (aabb.Y + aabb.H) - entityBounds.Y
+			overlapBottom := (entityBounds.Y + entityBounds.H) - aabb.Y
+
+			// Find minimum overlap axis
+			minOverlapX := overlapLeft
+			normalX := -1.0
+			if overlapRight < overlapLeft {
+				minOverlapX = overlapRight
+				normalX = 1.0
+			}
+
+			minOverlapY := overlapTop
+			normalY := -1.0
+			if overlapBottom < overlapTop {
+				minOverlapY = overlapBottom
+				normalY = 1.0
+			}
+
+			// Use the axis with minimum overlap
+			var col physics.Collision
+			col.TileX = -1 // Mark as entity collision
+			col.TileY = -1
+			if minOverlapX < minOverlapY {
+				col.NormalX = normalX
+				col.NormalY = 0
+			} else {
+				col.NormalX = 0
+				col.NormalY = normalY
+			}
+
+			collisions = append(collisions, col)
+		}
+	}
+
 	return collisions
 }
 
 // Update implements app.Scene.Update.
 // This handles non-physics updates and input.
 func (s *Scene) Update(inp *input.Input) error {
+	// Update state machine
+	s.state.Update(1.0 / 60.0)
+
+	// Handle respawn
+	if s.state.IsRespawning() {
+		s.respawnPlayer()
+	}
+
 	// Handle debug toggles
 	s.handleDebugToggles()
 
@@ -265,6 +400,9 @@ func (s *Scene) Update(inp *input.Input) error {
 	playerCenterY := s.playerBody.PosY + s.playerBody.H/2
 	s.camera.Follow(playerCenterX, playerCenterY, s.playerBody.W, s.playerBody.H)
 	s.camera.Update(1.0 / 60.0)
+
+	// Update entities
+	s.entityWorld.Update(1.0 / 60.0)
 
 	// Update animator (non-physics)
 	if s.animator != nil {
@@ -278,6 +416,15 @@ func (s *Scene) Update(inp *input.Input) error {
 	s.inp.Update()
 
 	return nil
+}
+
+// respawnPlayer resets player position to the respawn point.
+func (s *Scene) respawnPlayer() {
+	s.playerBody.PosX = s.state.RespawnX
+	s.playerBody.PosY = s.state.RespawnY
+	s.playerBody.VelX = 0
+	s.playerBody.VelY = 0
+	s.state.FinishRespawn()
 }
 
 // handleDebugToggles processes debug key bindings.
@@ -294,14 +441,22 @@ func (s *Scene) handleDebugToggles() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
 		s.showDebugSteps = !s.showDebugSteps
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF6) {
+		s.showDebugEntities = !s.showDebugEntities
+	}
+	// Force respawn with R
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+		s.state.TriggerDeath()
+	}
 }
 
 // updateDebugText updates the debug text string.
 func (s *Scene) updateDebugText() {
-	s.debugText = fmt.Sprintf("pos: (%.1f, %.1f)\nvel: (%.1f, %.1f)\ngrounded: %v\nF2: collision | F3: deadzone | F4: state | F5: steps",
+	s.debugText = fmt.Sprintf("pos: (%.1f, %.1f)\nvel: (%.1f, %.1f)\ngrounded: %v\nstate: %s\nF2: collision | F3: deadzone | F4: state | F5: steps | F6: entities | R: respawn",
 		s.playerBody.PosX, s.playerBody.PosY,
 		s.playerBody.VelX, s.playerBody.VelY,
-		s.playerBody.OnGround)
+		s.playerBody.OnGround,
+		s.state.Current.String())
 }
 
 // Draw implements app.Scene.Draw.
@@ -311,6 +466,9 @@ func (s *Scene) Draw(screen *ebiten.Image) {
 
 	// Draw map with camera offset
 	s.renderer.Draw(screen, s.camera.X, s.camera.Y)
+
+	// Draw entities
+	s.entityWorld.Draw(screen, s.camera.X, s.camera.Y)
 
 	// Draw player
 	s.drawPlayer(screen)
@@ -327,6 +485,18 @@ func (s *Scene) Draw(screen *ebiten.Image) {
 	}
 	if s.showDebugSteps {
 		s.drawStepCounter(screen)
+	}
+	if s.showDebugEntities {
+		s.debugRenderer.ShowAll = true
+		s.debugRenderer.Draw(screen, s.entityWorld, s.camera.X, s.camera.Y)
+		s.debugRenderer.DrawPlayerDebug(screen, s.playerBody, s.camera.X, s.camera.Y)
+	}
+
+	// Draw state overlay
+	if s.state.IsDead() {
+		s.drawDeathOverlay(screen)
+	} else if s.state.IsCompleted() {
+		s.drawCompleteOverlay(screen)
 	}
 
 	// Draw debug text
@@ -352,6 +522,22 @@ func (s *Scene) drawPlayer(screen *ebiten.Image) {
 		drawY := s.playerBody.PosY - s.camera.Y
 		ebitenutil.DrawRect(screen, drawX, drawY, s.playerBody.W, s.playerBody.H, playerColor)
 	}
+}
+
+// drawDeathOverlay shows a death message.
+func (s *Scene) drawDeathOverlay(screen *ebiten.Image) {
+	text := "YOU DIED"
+	x := s.width/2 - 30
+	y := s.height/2 - 10
+	ebitenutil.DebugPrintAt(screen, text, x, y)
+}
+
+// drawCompleteOverlay shows a level complete message.
+func (s *Scene) drawCompleteOverlay(screen *ebiten.Image) {
+	text := "LEVEL COMPLETE!"
+	x := s.width/2 - 50
+	y := s.height/2 - 10
+	ebitenutil.DebugPrintAt(screen, text, x, y)
 }
 
 // drawCollisionDebug draws the collision overlay.
