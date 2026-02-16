@@ -1,5 +1,5 @@
 // Package assets provides asset loading utilities for the game.
-// Assets are loaded from disk at runtime rather than embedded.
+// Assets are loaded from disk at runtime.
 package assets
 
 import (

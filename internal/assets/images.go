@@ -6,6 +6,7 @@ import (
 	"image"
 	_ "image/png" // PNG decoder
 	"io/fs"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -36,4 +37,32 @@ func LoadImageFromBytes(data []byte) (*ebiten.Image, error) {
 	}
 
 	return ebiten.NewImageFromImage(img), nil
+}
+
+// LoadFile loads a file's contents as bytes from the assets directory.
+func LoadFile(path string) ([]byte, error) {
+	return os.ReadFile(AssetsDir + "/" + path)
+}
+
+// LoadSpriteSheet loads the sprite sheet from assets/sprites/test_sheet.png.
+func LoadSpriteSheet() (*ebiten.Image, error) {
+	fs, err := SubFS("sprites")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open sprites directory: %w", err)
+	}
+	return LoadImage(fs, "test_sheet.png")
+}
+
+// LoadTileset loads the tileset from assets/tiles/tiles.png.
+func LoadTileset() (*ebiten.Image, error) {
+	fs, err := SubFS("tiles")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tiles directory: %w", err)
+	}
+	return LoadImage(fs, "tiles.png")
+}
+
+// LoadLevelJSON loads the level JSON from assets/levels/level_01.json.
+func LoadLevelJSON() ([]byte, error) {
+	return LoadFile("levels/level_01.json")
 }

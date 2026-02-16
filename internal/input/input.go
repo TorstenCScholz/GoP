@@ -13,6 +13,7 @@ const (
 	ActionMoveRight
 	ActionMoveUp
 	ActionMoveDown
+	ActionJump
 	ActionQuit
 	ActionDebugToggle
 )
@@ -36,6 +37,7 @@ func NewInput() *Input {
 	i.keyMap[ActionMoveRight] = []ebiten.Key{ebiten.KeyArrowRight, ebiten.KeyD}
 	i.keyMap[ActionMoveUp] = []ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyW}
 	i.keyMap[ActionMoveDown] = []ebiten.Key{ebiten.KeyArrowDown, ebiten.KeyS}
+	i.keyMap[ActionJump] = []ebiten.Key{ebiten.KeySpace, ebiten.KeyZ}
 	i.keyMap[ActionQuit] = []ebiten.Key{ebiten.KeyEscape}
 	i.keyMap[ActionDebugToggle] = []ebiten.Key{ebiten.KeyF1}
 
@@ -46,11 +48,15 @@ func NewInput() *Input {
 func (i *Input) Pressed(action Action) bool {
 	keys, ok := i.keyMap[action]
 	if !ok {
+		println("[DEBUG INPUT] No keys mapped for action:", int(action))
 		return false
 	}
 
+	// DEBUG: Check each key
 	for _, key := range keys {
-		if ebiten.IsKeyPressed(key) {
+		pressed := ebiten.IsKeyPressed(key)
+		if pressed {
+			println("[DEBUG INPUT] Key", int(key), "is pressed for action", int(action))
 			return true
 		}
 	}
