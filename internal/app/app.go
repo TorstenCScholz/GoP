@@ -2,16 +2,21 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/input"
+	timestep "github.com/torsten/GoP/internal/time"
 )
 
 // Scene represents a game scene that can be active in the app.
 type Scene interface {
-	// Update updates the scene's logic.
+	// Update updates the scene's non-physics logic.
 	Update(inp *input.Input) error
+	// FixedUpdate updates physics at a fixed rate.
+	// dt is guaranteed to be constant (e.g., 1/60 second).
+	FixedUpdate() error
 	// Draw renders the scene to the screen.
 	Draw(screen *ebiten.Image)
 	// Layout returns the logical screen size.
@@ -32,6 +37,10 @@ type App struct {
 	input       *input.Input
 	config      *Config
 	debugActive bool
+	
+	// Fixed timestep for physics
+	timestep   *timestep.Timestep
+	lastUpdate time.Time
 }
 
 // New creates a new App with the given configuration.
@@ -41,8 +50,10 @@ func New(cfg *Config) *App {
 	}
 
 	return &App{
-		input:  input.NewInput(),
-		config: cfg,
+		input:      input.NewInput(),
+		config:     cfg,
+		timestep:   timestep.NewTimestep(),
+		lastUpdate: time.Now(),
 	}
 }
 
@@ -63,7 +74,20 @@ func (a *App) Update() error {
 		return fmt.Errorf("quit requested")
 	}
 
-	// Delegate to current scene
+	// Fixed timestep physics loop
+	a.timestep.AddFrameTime(time.Since(a.lastUpdate))
+	a.lastUpdate = time.Now()
+
+	for a.timestep.ShouldUpdate() {
+		a.timestep.ConsumeTick()
+		if a.scene != nil {
+			if err := a.scene.FixedUpdate(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Non-physics updates
 	if a.scene != nil {
 		if err := a.scene.Update(a.input); err != nil {
 			return err
