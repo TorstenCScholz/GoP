@@ -31,6 +31,9 @@ type PlayerState struct {
 	JumpHeldTime time.Duration // How long jump has been held
 	IsJumping    bool          // True during active jump
 	JumpReleased bool          // True if jump released early
+
+	// Platform carry tracking
+	CurrentPlatform Kinematic // The platform the player is currently standing on (nil if none)
 }
 
 // Controller handles player input and physics with feel mechanics.
@@ -337,4 +340,45 @@ func (c *Controller) resolveCollisions(dx, dy float64, collisionFunc func(AABB) 
 			}
 		}
 	}
+}
+
+// ApplyPlatformCarry applies platform velocity to the player position.
+// This should be called BEFORE the player's own physics update.
+// The player is carried if standing on a platform.
+func (c *Controller) ApplyPlatformCarry(platform Kinematic, dt time.Duration) {
+	if platform == nil || !platform.IsActive() {
+		return
+	}
+
+	// Check if player is grounded on this platform
+	platformBody := platform.GetBody()
+	if platformBody == nil {
+		return
+	}
+
+	platformAABB := platformBody.AABB()
+	tolerance := 2.0 // pixels
+
+	if !IsPlayerGroundedOnPlatform(c.Body, platformAABB, tolerance) {
+		return
+	}
+
+	// Apply platform velocity to player position
+	vx, _ := platform.Velocity()
+	c.Body.PosX += vx * dt.Seconds()
+
+	// Track the current platform
+	c.State.CurrentPlatform = platform
+}
+
+// ClearPlatformCarry clears the current platform reference.
+// This should be called at the start of each frame before checking platforms.
+func (c *Controller) ClearPlatformCarry() {
+	c.State.CurrentPlatform = nil
+}
+
+// GetCurrentPlatform returns the platform the player is currently standing on.
+// Returns nil if the player is not on a platform.
+func (c *Controller) GetCurrentPlatform() Kinematic {
+	return c.State.CurrentPlatform
 }

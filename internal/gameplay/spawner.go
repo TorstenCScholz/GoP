@@ -1,7 +1,10 @@
 package gameplay
 
 import (
+	"fmt"
+
 	"github.com/torsten/GoP/internal/entities"
+	"github.com/torsten/GoP/internal/physics"
 	"github.com/torsten/GoP/internal/world"
 )
 
@@ -14,11 +17,12 @@ type SpawnContext struct {
 }
 
 // SpawnEntities creates entities from object data and returns them.
-// Returns entities, triggers, and solid entities separately for the caller to add to the world.
-func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Entity, []entities.Trigger, []entities.SolidEntity) {
+// Returns entities, triggers, solid entities, and kinematics separately for the caller to add to the world.
+func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Entity, []entities.Trigger, []entities.SolidEntity, []physics.Kinematic) {
 	var entityList []entities.Entity
 	var triggers []entities.Trigger
 	var solidEnts []entities.SolidEntity
+	var kinematics []physics.Kinematic
 
 	// First pass: create all entities
 	var switches []*entities.Switch
@@ -70,6 +74,33 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 			}
 			solidEnts = append(solidEnts, door)
 			entityList = append(entityList, door)
+
+		case world.ObjectTypePlatform:
+			// Parse platform properties
+			id := obj.GetPropString("id", obj.Name)
+			if id == "" {
+				id = fmt.Sprintf("platform_%d", obj.ID)
+			}
+
+			// endX and endY are relative offsets from the start position
+			endXOffset := obj.GetPropFloat("endX", 0)
+			endYOffset := obj.GetPropFloat("endY", 0)
+			speed := obj.GetPropFloat("speed", 60)
+			waitTime := obj.GetPropFloat("waitTime", 0.5)
+			pushPlayer := obj.GetPropBool("pushPlayer", false)
+
+			// Calculate absolute end position
+			endX := obj.X + endXOffset
+			endY := obj.Y + endYOffset
+
+			platform := entities.NewMovingPlatform(id, obj.X, obj.Y, obj.W, obj.H, endX, endY, speed)
+			platform.SetWaitTime(waitTime)
+			platform.SetPushPlayer(pushPlayer)
+
+			// Platform is both a solid entity and a kinematic
+			solidEnts = append(solidEnts, platform)
+			kinematics = append(kinematics, platform)
+			entityList = append(entityList, platform)
 		}
 	}
 
@@ -80,5 +111,5 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 		}
 	}
 
-	return entityList, triggers, solidEnts
+	return entityList, triggers, solidEnts, kinematics
 }

@@ -15,6 +15,7 @@ const (
 	ObjectTypeSwitch     ObjectType = "switch"
 	ObjectTypeDoor       ObjectType = "door"
 	ObjectTypeGoal       ObjectType = "goal"
+	ObjectTypePlatform   ObjectType = "platform"
 )
 
 // ObjectData represents a parsed Tiled object.

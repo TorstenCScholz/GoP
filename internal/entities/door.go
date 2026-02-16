@@ -100,9 +100,15 @@ func (d *Door) Bounds() physics.AABB {
 	return d.body.AABB()
 }
 
-// Body implements SolidEntity.
-func (d *Door) Body() *physics.Body {
+// GetBody implements SolidEntity.
+func (d *Door) GetBody() *physics.Body {
 	return d.body
+}
+
+// IsActive implements SolidEntity.
+// A door is active when it is closed (blocking movement).
+func (d *Door) IsActive() bool {
+	return !d.isOpen
 }
 
 // GetID returns the door's identifier.

@@ -154,6 +154,21 @@
           "y": 288,
           "width": 32,
           "height": 64
+        },
+        {
+          "id": 8,
+          "name": "TestPlatform",
+          "type": "platform",
+          "x": 200,
+          "y": 300,
+          "width": 64,
+          "height": 16,
+          "properties": [
+            {"name": "endX", "type": "float", "value": 350},
+            {"name": "endY", "type": "float", "value": 300},
+            {"name": "speed", "type": "float", "value": 60},
+            {"name": "waitTime", "type": "float", "value": 1.0}
+          ]
         }
       ],
       "opacity": 1,
@@ -164,7 +179,7 @@
     }
   ],
   "nextlayerid": 4,
-  "nextobjectid": 8,
+  "nextobjectid": 9,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.10.2",

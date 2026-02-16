@@ -1,5 +1,20 @@
 package physics
 
+import "github.com/torsten/GoP/internal/world"
+
+// SolidEntity represents an entity with a physical body that can collide
+type SolidEntity interface {
+	GetBody() *Body
+	IsActive() bool
+}
+
+// Kinematic represents a solid entity that moves itself and can carry the player
+type Kinematic interface {
+	SolidEntity
+	Velocity() (vx, vy float64)
+	MoveAndSlide(collisionMap *world.CollisionMap, dt float64) (dx, dy float64)
+}
+
 // Body represents a physics body with position, velocity, and size.
 // Position (PosX, PosY) is the top-left corner of the bounding box.
 type Body struct {

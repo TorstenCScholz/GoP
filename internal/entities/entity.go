@@ -48,11 +48,15 @@ type Trigger interface {
 
 // SolidEntity is an entity with physics collision.
 // These entities participate in tile collision resolution.
+// This interface is compatible with physics.SolidEntity.
 type SolidEntity interface {
 	Entity
 
-	// Body returns the physics body for collision resolution.
-	Body() *physics.Body
+	// GetBody returns the physics body for collision resolution.
+	GetBody() *physics.Body
+
+	// IsActive returns whether the entity is currently active.
+	IsActive() bool
 }
 
 // TriggerState provides common state for trigger implementations.

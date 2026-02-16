@@ -161,3 +161,129 @@ func (r *CollisionResolver) snapBottom(body *Body, collisionMap *world.Collision
 	}
 	return maxY
 }
+
+// SolidCollisionResult contains the result of resolving against a solid body.
+type SolidCollisionResult struct {
+	// Grounded is true if the player is standing on top of the solid.
+	Grounded bool
+	// PushedSideways is true if the player was pushed left or right.
+	PushedSideways bool
+	// PushDirection is -1 for left, 1 for right (only valid if PushedSideways is true).
+	PushDirection float64
+}
+
+// ResolveSolid resolves player collision against a single solid body AABB.
+// It pushes the player out along the smallest overlap axis.
+// Returns whether the player is grounded (standing on top) and whether pushed sideways.
+func ResolveSolid(player *Body, solidAABB AABB) SolidCollisionResult {
+	result := SolidCollisionResult{}
+
+	// Get player AABB
+	playerAABB := player.AABB()
+
+	// Check if they overlap
+	if !playerAABB.Intersects(solidAABB) {
+		return result
+	}
+
+	// Calculate overlap on each axis
+	overlapLeft := playerAABB.Right() - solidAABB.Left()   // Player right vs solid left
+	overlapRight := solidAABB.Right() - playerAABB.Left()  // Solid right vs player left
+	overlapTop := playerAABB.Bottom() - solidAABB.Top()    // Player bottom vs solid top
+	overlapBottom := solidAABB.Bottom() - playerAABB.Top() // Solid bottom vs player top
+
+	// Find minimum overlap on each axis
+	minOverlapX := overlapLeft
+	pushDirX := -1.0 // Push player left
+	if overlapRight < overlapLeft {
+		minOverlapX = overlapRight
+		pushDirX = 1.0 // Push player right
+	}
+
+	minOverlapY := overlapTop
+	pushDirY := -1.0 // Push player up (grounded)
+	if overlapBottom < overlapTop {
+		minOverlapY = overlapBottom
+		pushDirY = 1.0 // Push player down
+	}
+
+	// Resolve along the axis with smallest overlap
+	if minOverlapX < minOverlapY {
+		// Push horizontally
+		if pushDirX < 0 {
+			// Push left: align player right edge to solid left edge
+			player.PosX = solidAABB.Left() - player.W
+		} else {
+			// Push right: align player left edge to solid right edge
+			player.PosX = solidAABB.Right()
+		}
+		result.PushedSideways = true
+		result.PushDirection = pushDirX
+	} else {
+		// Push vertically
+		if pushDirY < 0 {
+			// Push up: player is grounded on top of solid
+			player.PosY = solidAABB.Top() - player.H
+			player.OnGround = true
+			player.VelY = 0
+			result.Grounded = true
+		} else {
+			// Push down: player hit ceiling from below
+			player.PosY = solidAABB.Bottom()
+			player.VelY = 0
+		}
+	}
+
+	return result
+}
+
+// ResolveSolids resolves player collision against multiple solid bodies.
+// Returns the combined result from all resolutions.
+func ResolveSolids(player *Body, solidAABBs []AABB) SolidCollisionResult {
+	result := SolidCollisionResult{}
+
+	for _, solid := range solidAABBs {
+		singleResult := ResolveSolid(player, solid)
+		if singleResult.Grounded {
+			result.Grounded = true
+		}
+		if singleResult.PushedSideways {
+			result.PushedSideways = true
+			result.PushDirection = singleResult.PushDirection
+		}
+	}
+
+	return result
+}
+
+// IsPlayerGroundedOnPlatform checks if the player is standing on a platform.
+// This is used for carry logic - the player should be carried if:
+// - Player bottom edge aligns with platform top edge (within tolerance)
+// - Player horizontal range overlaps with platform horizontal range
+func IsPlayerGroundedOnPlatform(player *Body, platformAABB AABB, tolerance float64) bool {
+	// Check vertical alignment: player bottom at platform top
+	playerBottom := player.PosY + player.H
+	platformTop := platformAABB.Y
+
+	if math.Abs(playerBottom-platformTop) > tolerance {
+		return false
+	}
+
+	// Check horizontal overlap
+	playerLeft := player.PosX
+	playerRight := player.PosX + player.W
+	platformLeft := platformAABB.X
+	platformRight := platformAABB.X + platformAABB.W
+
+	// Player must overlap horizontally with platform
+	if playerRight <= platformLeft || playerLeft >= platformRight {
+		return false
+	}
+
+	// Player must be above the platform (not inside it)
+	if player.PosY+player.H > platformTop+tolerance {
+		return false
+	}
+
+	return true
+}

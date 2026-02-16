@@ -22,9 +22,10 @@ type CollisionMapInterface interface {
 // EntityWorld holds entities and provides trigger checking.
 // It does not hold the map or collision data directly - those are passed in.
 type EntityWorld struct {
-	entities  []Entity
-	triggers  []Trigger
-	solidEnts []SolidEntity
+	entities   []Entity
+	triggers   []Trigger
+	solidEnts  []SolidEntity
+	kinematics []physics.Kinematic
 
 	// TargetRegistry manages ID-to-target lookups for switches, etc.
 	TargetRegistry *TargetRegistry
@@ -81,6 +82,25 @@ func (w *EntityWorld) Triggers() []Trigger {
 // SolidEntities returns all solid entities.
 func (w *EntityWorld) SolidEntities() []SolidEntity {
 	return w.solidEnts
+}
+
+// AddKinematic adds a kinematic entity to the world.
+func (w *EntityWorld) AddKinematic(k physics.Kinematic) {
+	w.kinematics = append(w.kinematics, k)
+}
+
+// GetKinematics returns all kinematic entities.
+func (w *EntityWorld) GetKinematics() []physics.Kinematic {
+	return w.kinematics
+}
+
+// UpdateKinematics updates all kinematic entities with collision detection.
+func (w *EntityWorld) UpdateKinematics(collisionMap *world.CollisionMap, dt float64) {
+	for _, k := range w.kinematics {
+		if k.IsActive() {
+			k.MoveAndSlide(collisionMap, dt)
+		}
+	}
 }
 
 // Update updates all entities.
@@ -156,4 +176,20 @@ func (w *EntityWorld) OverlapsSolidEntity(aabb physics.AABB) bool {
 		}
 	}
 	return false
+}
+
+// DrawKinematicsDebug draws debug visualization for all kinematic entities.
+// Entities must implement the DebugDrawable interface to be drawn.
+func (w *EntityWorld) DrawKinematicsDebug(screen *ebiten.Image, ctx *world.RenderContext) {
+	for _, k := range w.kinematics {
+		// Check if the kinematic implements DebugDrawable
+		if dd, ok := k.(DebugDrawable); ok {
+			dd.DrawDebug(screen, ctx)
+		}
+	}
+}
+
+// DebugDrawable is an interface for entities that can draw debug visualization.
+type DebugDrawable interface {
+	DrawDebug(screen *ebiten.Image, ctx *world.RenderContext)
 }

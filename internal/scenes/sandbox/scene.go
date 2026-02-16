@@ -189,7 +189,7 @@ func (s *Scene) loadEntities() {
 	}
 
 	// Spawn entities
-	_, triggers, solidEnts := gameplay.SpawnEntities(objects, ctx)
+	_, triggers, solidEnts, kinematics := gameplay.SpawnEntities(objects, ctx)
 
 	// Add entities to world
 	for _, t := range triggers {
@@ -197,6 +197,9 @@ func (s *Scene) loadEntities() {
 	}
 	for _, e := range solidEnts {
 		s.entityWorld.AddSolidEntity(e)
+	}
+	for _, k := range kinematics {
+		s.entityWorld.AddKinematic(k)
 	}
 }
 
@@ -235,15 +238,31 @@ func (s *Scene) FixedUpdate() error {
 		return nil
 	}
 
-	// Create collision function for the controller
+	dt := s.timestep.TickDuration()
+
+	// Step 1: Update kinematic entities FIRST (platforms move before player physics)
+	s.entityWorld.UpdateKinematics(s.collisionMap, dt.Seconds())
+
+	// Step 2: Clear previous platform reference and check for carry
+	s.playerController.ClearPlatformCarry()
+	for _, k := range s.entityWorld.GetKinematics() {
+		if k.IsActive() {
+			s.playerController.ApplyPlatformCarry(k, dt)
+		}
+	}
+
+	// Step 3: Create collision function for the controller
 	collisionFunc := func(aabb physics.AABB) []physics.Collision {
 		return s.resolveCollisions(aabb)
 	}
 
-	// Update player physics with fixed timestep
-	s.playerController.FixedUpdate(s.timestep.TickDuration(), s.inp, collisionFunc)
+	// Step 4: Update player physics with fixed timestep
+	s.playerController.FixedUpdate(dt, s.inp, collisionFunc)
 
-	// Check triggers after movement
+	// Step 5: Resolve player collision against solid entities (including platforms)
+	s.resolveSolidEntityCollisions()
+
+	// Step 6: Check triggers after movement
 	s.entityWorld.CheckTriggers(s.playerBody)
 
 	return nil
@@ -371,6 +390,40 @@ func (s *Scene) resolveCollisions(aabb physics.AABB) []physics.Collision {
 	return collisions
 }
 
+// resolveSolidEntityCollisions resolves player collision against solid entities.
+// This is called after tile collision to handle entity-specific collision.
+func (s *Scene) resolveSolidEntityCollisions() {
+	// Collect AABBs of all active solid entities
+	var solidAABBs []physics.AABB
+
+	// Add regular solid entities
+	for _, e := range s.entityWorld.SolidEntities() {
+		if !e.IsActive() {
+			continue
+		}
+		bounds := e.Bounds()
+		if bounds.W > 0 && bounds.H > 0 {
+			solidAABBs = append(solidAABBs, bounds)
+		}
+	}
+
+	// Add kinematic entities (platforms)
+	for _, k := range s.entityWorld.GetKinematics() {
+		if !k.IsActive() {
+			continue
+		}
+		body := k.GetBody()
+		if body != nil && body.W > 0 && body.H > 0 {
+			solidAABBs = append(solidAABBs, body.AABB())
+		}
+	}
+
+	// Resolve against all solids
+	if len(solidAABBs) > 0 {
+		physics.ResolveSolids(s.playerBody, solidAABBs)
+	}
+}
+
 // Update implements app.Scene.Update.
 // This handles non-physics updates and input.
 func (s *Scene) Update(inp *input.Input) error {
@@ -442,10 +495,22 @@ func (s *Scene) handleDebugToggles() {
 
 // updateDebugText updates the debug text string.
 func (s *Scene) updateDebugText() {
-	s.debugText = fmt.Sprintf("pos: (%.1f, %.1f)\nvel: (%.1f, %.1f)\ngrounded: %v\nstate: %s\nF2: collision | F3: deadzone | F4: state | F5: steps | F6: entities | R: respawn",
+	// Build platform info
+	platformInfo := "onPlatform: false"
+	if platform := s.playerController.GetCurrentPlatform(); platform != nil {
+		// Try to get platform ID if available
+		if idGetter, ok := platform.(interface{ GetID() string }); ok {
+			platformInfo = fmt.Sprintf("onPlatform: true\nplatform: %s", idGetter.GetID())
+		} else {
+			platformInfo = "onPlatform: true"
+		}
+	}
+
+	s.debugText = fmt.Sprintf("pos: (%.1f, %.1f)\nvel: (%.1f, %.1f)\ngrounded: %v\n%s\nstate: %s\nF2: collision | F3: deadzone | F4: state | F5: steps | F6: entities | R: respawn",
 		s.playerBody.PosX, s.playerBody.PosY,
 		s.playerBody.VelX, s.playerBody.VelY,
 		s.playerBody.OnGround,
+		platformInfo,
 		s.state.Current.String())
 }
 
@@ -484,6 +549,8 @@ func (s *Scene) Draw(screen *ebiten.Image) {
 		s.debugRenderer.ShowAll = true
 		s.debugRenderer.DrawWithContext(screen, s.entityWorld, ctx)
 		s.debugRenderer.DrawPlayerDebugWithContext(screen, s.playerBody, ctx)
+		// Draw platform debug visualization (paths and bounds)
+		s.entityWorld.DrawKinematicsDebug(screen, ctx)
 	}
 
 	// Draw state overlay
