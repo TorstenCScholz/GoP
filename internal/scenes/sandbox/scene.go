@@ -108,7 +108,10 @@ func New() *Scene {
 	s.renderer = world.NewMapRenderer(s.tileMap)
 
 	// Create enhanced camera with deadzone
-	s.camera = camera.NewCamera(s.width, s.height)
+	// Use smaller viewport (half screen size) for deadzone testing
+	viewportW := s.width / 2
+	viewportH := s.height / 2
+	s.camera = camera.NewCamera(viewportW, viewportH)
 	s.camera.SetDeadzoneCentered(0.25, 0.4) // 25% width, 40% height deadzone
 	s.camera.SetLevelBounds(float64(s.tileMap.PixelWidth()), float64(s.tileMap.PixelHeight()))
 	s.camera.PixelPerfect = true
@@ -443,8 +446,9 @@ func (s *Scene) Layout(outsideW, outsideH int) (int, int) {
 	s.width = outsideW
 	s.height = outsideH
 	if s.camera != nil {
-		s.camera.ViewportW = outsideW
-		s.camera.ViewportH = outsideH
+		// Keep viewport at half screen size for deadzone testing
+		s.camera.ViewportW = outsideW / 2
+		s.camera.ViewportH = outsideH / 2
 	}
 	return outsideW, outsideH
 }
