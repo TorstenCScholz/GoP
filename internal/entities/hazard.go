@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // Hazard kills the player on touch.
@@ -31,11 +32,22 @@ func (h *Hazard) Update(dt float64) {
 }
 
 // Draw implements Entity.
+// Deprecated: Use DrawWithContext for new implementations.
 func (h *Hazard) Draw(screen *ebiten.Image, camX, camY float64) {
 	// Draw hazard indicator (red semi-transparent)
 	if h.state.Active {
 		x := h.bounds.X - camX
 		y := h.bounds.Y - camY
+		hazardColor := color.RGBA{255, 0, 0, 128}
+		ebitenutil.DrawRect(screen, x, y, h.bounds.W, h.bounds.H, hazardColor)
+	}
+}
+
+// DrawWithContext implements Entity.
+func (h *Hazard) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	// Draw hazard indicator (red semi-transparent)
+	if h.state.Active {
+		x, y := ctx.WorldToScreen(h.bounds.X, h.bounds.Y)
 		hazardColor := color.RGBA{255, 0, 0, 128}
 		ebitenutil.DrawRect(screen, x, y, h.bounds.W, h.bounds.H, hazardColor)
 	}

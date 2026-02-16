@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // Checkpoint updates the respawn point when touched.
@@ -35,9 +36,26 @@ func (c *Checkpoint) Update(dt float64) {
 }
 
 // Draw implements Entity.
+// Deprecated: Use DrawWithContext for new implementations.
 func (c *Checkpoint) Draw(screen *ebiten.Image, camX, camY float64) {
 	x := c.bounds.X - camX
 	y := c.bounds.Y - camY
+
+	// Draw checkpoint indicator
+	var col color.RGBA
+	if c.triggered {
+		// Green when activated
+		col = color.RGBA{0, 255, 0, 128}
+	} else {
+		// Yellow when not yet activated
+		col = color.RGBA{255, 255, 0, 128}
+	}
+	ebitenutil.DrawRect(screen, x, y, c.bounds.W, c.bounds.H, col)
+}
+
+// DrawWithContext implements Entity.
+func (c *Checkpoint) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	x, y := ctx.WorldToScreen(c.bounds.X, c.bounds.Y)
 
 	// Draw checkpoint indicator
 	var col color.RGBA

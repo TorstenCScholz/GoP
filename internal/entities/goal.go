@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // Goal triggers level completion when touched.
@@ -31,6 +32,7 @@ func (g *Goal) Update(dt float64) {
 }
 
 // Draw implements Entity.
+// Deprecated: Use DrawWithContext for new implementations.
 func (g *Goal) Draw(screen *ebiten.Image, camX, camY float64) {
 	if !g.state.Active {
 		return
@@ -38,6 +40,26 @@ func (g *Goal) Draw(screen *ebiten.Image, camX, camY float64) {
 
 	x := g.bounds.X - camX
 	y := g.bounds.Y - camY
+
+	// Draw goal indicator (green/blue gradient effect)
+	goalColor := color.RGBA{0, 200, 255, 128}
+	ebitenutil.DrawRect(screen, x, y, g.bounds.W, g.bounds.H, goalColor)
+
+	// Draw border
+	borderColor := color.RGBA{255, 255, 255, 255}
+	ebitenutil.DrawRect(screen, x, y, g.bounds.W, 2, borderColor)
+	ebitenutil.DrawRect(screen, x, y+g.bounds.H-2, g.bounds.W, 2, borderColor)
+	ebitenutil.DrawRect(screen, x, y, 2, g.bounds.H, borderColor)
+	ebitenutil.DrawRect(screen, x+g.bounds.W-2, y, 2, g.bounds.H, borderColor)
+}
+
+// DrawWithContext implements Entity.
+func (g *Goal) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	if !g.state.Active {
+		return
+	}
+
+	x, y := ctx.WorldToScreen(g.bounds.X, g.bounds.Y)
 
 	// Draw goal indicator (green/blue gradient effect)
 	goalColor := color.RGBA{0, 200, 255, 128}

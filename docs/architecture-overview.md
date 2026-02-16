@@ -182,7 +182,7 @@ Located in [`internal/entities/`](internal/entities/).
 | toggleMode: bool |
 | once: bool       |
 | used: bool       |
-| targetDoor: *Door |
+| registry: *TargetRegistry |
 +------------------+
 ```
 
@@ -193,6 +193,91 @@ Located in [`internal/entities/`](internal/entities/).
 - [`TriggerState struct`](internal/entities/entity.go:53) - Shared trigger state
 - [`EntityWorld struct`](internal/entities/world.go:23) - Entity container and manager
 - [`Checkpoint`](internal/entities/checkpoint.go), [`Door`](internal/entities/door.go), [`Goal`](internal/entities/goal.go), [`Hazard`](internal/entities/hazard.go), [`Switch`](internal/entities/switch.go)
+
+### Target Registry Pattern
+
+The Target Registry provides decoupled ID-based resolution between triggers (like Switches) and their targets (like Doors), replacing direct pointer references.
+
+```
++---------------------------+
+|     Targetable interface  |
++---------------------------+
+| + Activate()              |  Trigger the primary action
+| + Deactivate()            |  Trigger the inverse action
+| + Toggle()                |  Flip between states
+| + TargetID() string       |  Return unique identifier
++---------------------------+
+              ^
+              | implements
+              |
++---------------------------+
+|         Door              |
++---------------------------+
+| id: string                |  Unique identifier
+| isOpen: bool              |  Current state
++---------------------------+
+| + Activate()  { Open() }  |
+| + Deactivate() { Close() }|
+| + Toggle() { Toggle() }   |
+| + TargetID() { return id }|
++---------------------------+
+
++---------------------------+
+|     TargetRegistry        |
++---------------------------+
+| targets: map[string]Targetable |
++---------------------------+
+| + Register(t Targetable)  |  Add target to registry
+| + Unregister(t Targetable)|  Remove target
+| + Resolve(id string) Targetable |  Look up by ID
+| + HasTarget(id) bool      |  Check if exists
+| + AllTargets() []Targetable |  Get all targets
++---------------------------+
+```
+
+**Benefits:**
+- **Decoupling**: Switch knows nothing about Door implementation
+- **Serialization**: Only `targetID` string needs serialization
+- **Extensibility**: Any entity can implement `Targetable`
+- **Testability**: Easy to create mock targets for tests
+
+**Switch with Target Registry:**
+
+```go
+type Switch struct {
+    bounds     physics.AABB
+    state      TriggerState
+    targetID   string          // ID from Tiled map (serialized)
+    toggleMode bool
+    once       bool
+    used       bool
+    
+    // Registry reference instead of direct *Door pointer
+    registry   *TargetRegistry
+}
+
+func (s *Switch) OnEnter(player *physics.Body) {
+    if !s.state.Active {
+        return
+    }
+    
+    // Resolve target at runtime via ID
+    target := s.registry.Resolve(s.targetID)
+    if target == nil {
+        return
+    }
+    
+    if s.toggleMode {
+        target.Toggle()
+    } else {
+        target.Activate()
+    }
+}
+```
+
+**Key Files:**
+- [`Targetable interface`](internal/entities/targetable.go:4) - Target contract
+- [`TargetRegistry struct`](internal/entities/targetable.go:17) - ID-to-target resolution
 
 ### World/Map System
 
@@ -266,8 +351,68 @@ Located in [`internal/world/`](internal/world/).
 - [`Map`](internal/world/map.go) - Complete tilemap with layers
 - [`SolidGrid`](internal/world/collision.go:9) - Boolean collision grid
 - [`CollisionMap`](internal/world/collision.go:74) - Collision query interface
-- [`Camera`](internal/world/render.go:8) - Viewport offset for scrolling
+- [`Camera`](internal/camera/camera.go) - Advanced camera with deadzone and smoothing
 - [`MapRenderer`](internal/world/render.go:67) - Tilemap rendering with camera
+- [`RenderContext`](internal/world/render_context.go) - Unified render state container
+
+### RenderContext Pattern
+
+The `RenderContext` consolidates all render state into a single struct passed to draw methods, replacing the previous pattern of passing raw `camX, camY` coordinates.
+
+```
++---------------------------+
+|      RenderContext        |
++---------------------------+
+| Cam: *camera.Camera       |  Camera reference for transforms
+| Debug: bool               |  Debug rendering toggle
+| DT: float64               |  Delta time for animations
+| Screen: *ebiten.Image     |  Target screen buffer
++---------------------------+
+| + WorldToScreen(x,y)      |  Convert world to screen coords
+| + ScreenToWorld(x,y)      |  Convert screen to world coords
+| + IsVisible(x,y,w,h)      |  Check if rect is in viewport
+| + CameraX() float64       |  Get camera X (compatibility)
+| + CameraY() float64       |  Get camera Y (compatibility)
++---------------------------+
+```
+
+**Benefits:**
+- **Unified camera ownership**: Single camera implementation in `internal/camera/`
+- **Cleaner signatures**: `Draw(screen, ctx)` instead of `Draw(screen, camX, camY)`
+- **Extensibility**: Easy to add debug flags, screen bounds, etc.
+- **Visibility culling**: Built-in support for off-screen culling
+
+**Usage Example:**
+
+```go
+// Creating a render context
+ctx := world.NewRenderContext(camera, screen, dt)
+ctx.Debug = debugMode
+
+// Using in entity draw methods
+func (e *MyEntity) Draw(screen *ebiten.Image, ctx *RenderContext) {
+    // Convert world position to screen coordinates
+    screenX, screenY := ctx.WorldToScreen(e.x, e.y)
+    
+    // Check visibility before rendering
+    if !ctx.IsVisible(e.x, e.y, e.width, e.height) {
+        return
+    }
+    
+    // Draw at screen position
+    op := &ebiten.DrawImageOptions{}
+    op.GeoM.Translate(screenX, screenY)
+    screen.DrawImage(e.sprite, op)
+    
+    // Debug rendering
+    if ctx.Debug {
+        e.drawDebug(screen, ctx)
+    }
+}
+```
+
+**Key File:**
+- [`RenderContext struct`](internal/world/render_context.go:11) - Render state container
 
 ### Physics System
 
@@ -804,18 +949,28 @@ func (sm *StateMachine) TriggerDeath() {
 }
 ```
 
-#### Pattern 3: Direct Entity Coupling
+#### Pattern 3: Registry-Based Decoupling
 
-Switch holds direct reference to Door:
+Switch uses registry to resolve targets by ID:
 
 ```go
-// Switch.OnEnter directly manipulates door
+// Switch.OnEnter resolves target via registry
 func (s *Switch) OnEnter(player *physics.Body) {
-    if s.targetDoor != nil {
-        s.targetDoor.Open()
+    target := s.registry.Resolve(s.targetID)
+    if target != nil {
+        if s.toggleMode {
+            target.Toggle()
+        } else {
+            target.Activate()
+        }
     }
 }
 ```
+
+This pattern replaces the previous direct pointer coupling, enabling:
+- Serialization of `targetID` strings instead of pointers
+- Any entity implementing `Targetable` to be a valid target
+- Easier testing with mock targets
 
 ---
 

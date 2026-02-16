@@ -3,6 +3,7 @@ package entities
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // MapInterface provides the minimal map interface needed by EntityWorld.
@@ -24,14 +25,18 @@ type EntityWorld struct {
 	entities  []Entity
 	triggers  []Trigger
 	solidEnts []SolidEntity
+
+	// TargetRegistry manages ID-to-target lookups for switches, etc.
+	TargetRegistry *TargetRegistry
 }
 
 // NewEntityWorld creates an empty entity world.
 func NewEntityWorld() *EntityWorld {
 	return &EntityWorld{
-		entities:  make([]Entity, 0),
-		triggers:  make([]Trigger, 0),
-		solidEnts: make([]SolidEntity, 0),
+		entities:       make([]Entity, 0),
+		triggers:       make([]Trigger, 0),
+		solidEnts:      make([]SolidEntity, 0),
+		TargetRegistry: NewTargetRegistry(),
 	}
 }
 
@@ -47,9 +52,20 @@ func (w *EntityWorld) AddTrigger(t Trigger) {
 }
 
 // AddSolidEntity adds a solid entity to the world.
+// If the entity implements Targetable, it is also registered with the TargetRegistry.
 func (w *EntityWorld) AddSolidEntity(e SolidEntity) {
 	w.solidEnts = append(w.solidEnts, e)
 	w.entities = append(w.entities, e) // Also add to general entities list
+
+	// Auto-register Targetable entities
+	if t, ok := e.(Targetable); ok {
+		w.TargetRegistry.Register(t)
+	}
+}
+
+// RegisterTarget adds a Targetable entity to the registry.
+func (w *EntityWorld) RegisterTarget(t Targetable) {
+	w.TargetRegistry.Register(t)
 }
 
 // Entities returns all entities.
@@ -75,9 +91,17 @@ func (w *EntityWorld) Update(dt float64) {
 }
 
 // Draw renders all entities with camera offset.
+// Deprecated: Use DrawWithContext for new implementations.
 func (w *EntityWorld) Draw(screen *ebiten.Image, camX, camY float64) {
 	for _, e := range w.entities {
 		e.Draw(screen, camX, camY)
+	}
+}
+
+// DrawWithContext renders all entities using a RenderContext.
+func (w *EntityWorld) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	for _, e := range w.entities {
+		e.DrawWithContext(screen, ctx)
 	}
 }
 

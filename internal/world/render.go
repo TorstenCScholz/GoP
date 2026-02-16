@@ -213,3 +213,11 @@ func (r *MapRenderer) DrawWithCamera(screen *ebiten.Image) {
 	}
 	r.Draw(screen, r.cam.X, r.cam.Y)
 }
+
+// DrawWithContext renders the map using a RenderContext.
+func (r *MapRenderer) DrawWithContext(screen *ebiten.Image, ctx *RenderContext) {
+	if ctx.Cam == nil {
+		return
+	}
+	r.Draw(screen, ctx.Cam.X, ctx.Cam.Y)
+}

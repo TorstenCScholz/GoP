@@ -6,10 +6,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
-// Switch is a trigger that controls doors.
-// When touched, it can toggle or set the state of a target door.
+// Switch is a trigger that controls Targetable entities (doors, etc.).
+// When touched, it can toggle or set the state of a target.
 type Switch struct {
 	bounds     physics.AABB
 	state      TriggerState
@@ -18,8 +19,8 @@ type Switch struct {
 	once       bool // true = deactivate after use
 	used       bool // Has been used (for once mode)
 
-	// Reference to target door (resolved after spawning)
-	targetDoor *Door
+	// Registry for resolving targets at runtime
+	registry *TargetRegistry
 }
 
 // NewSwitch creates a new switch at the given position.
@@ -43,13 +44,13 @@ func (s *Switch) SetOnce(once bool) {
 	s.once = once
 }
 
-// SetTargetDoor sets the target door reference.
-func (s *Switch) SetTargetDoor(door *Door) {
-	s.targetDoor = door
+// SetRegistry sets the target registry for resolving targets at runtime.
+func (s *Switch) SetRegistry(registry *TargetRegistry) {
+	s.registry = registry
 }
 
-// TargetID returns the target door ID.
-func (s *Switch) TargetID() string {
+// GetTargetID returns the target ID for this switch.
+func (s *Switch) GetTargetID() string {
 	return s.targetID
 }
 
@@ -59,9 +60,38 @@ func (s *Switch) Update(dt float64) {
 }
 
 // Draw implements Entity.
+// Deprecated: Use DrawWithContext for new implementations.
 func (s *Switch) Draw(screen *ebiten.Image, camX, camY float64) {
 	x := s.bounds.X - camX
 	y := s.bounds.Y - camY
+
+	var col color.RGBA
+	if !s.state.Active {
+		// Gray when deactivated
+		col = color.RGBA{100, 100, 100, 255}
+	} else if s.used {
+		// Blue when used (if once mode)
+		col = color.RGBA{100, 100, 255, 255}
+	} else {
+		// Yellow/orange when ready
+		col = color.RGBA{255, 200, 0, 255}
+	}
+
+	// Draw switch body
+	ebitenutil.DrawRect(screen, x, y, s.bounds.W, s.bounds.H, col)
+
+	// Draw border
+	borderColor := color.RGBA{50, 50, 50, 255}
+	ebitenutil.DrawRect(screen, x, y, s.bounds.W, 2, borderColor)
+	ebitenutil.DrawRect(screen, x, y+s.bounds.H-2, s.bounds.W, 2, borderColor)
+	ebitenutil.DrawRect(screen, x, y, 2, s.bounds.H, borderColor)
+	ebitenutil.DrawRect(screen, x+s.bounds.W-2, y, 2, s.bounds.H, borderColor)
+}
+
+// DrawWithContext implements Entity.
+func (s *Switch) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	// Use WorldToScreen for coordinate conversion
+	x, y := ctx.WorldToScreen(s.bounds.X, s.bounds.Y)
 
 	var col color.RGBA
 	if !s.state.Active {
@@ -97,15 +127,21 @@ func (s *Switch) OnEnter(player *physics.Body) {
 		return
 	}
 
-	if s.targetDoor == nil {
+	// Resolve target from registry
+	if s.registry == nil {
+		return
+	}
+
+	target := s.registry.Resolve(s.targetID)
+	if target == nil {
 		return
 	}
 
 	// Execute switch action
 	if s.toggleMode {
-		s.targetDoor.Toggle()
+		target.Toggle()
 	} else {
-		s.targetDoor.Open()
+		target.Activate()
 	}
 
 	// Mark as used if once mode

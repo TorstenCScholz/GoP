@@ -10,7 +10,7 @@ type SpawnContext struct {
 	OnDeath       func()
 	OnCheckpoint  func(id string, x, y float64)
 	OnGoalReached func()
-	GetDoor       func(id string) *entities.Door
+	Registry      *entities.TargetRegistry
 }
 
 // SpawnEntities creates entities from object data and returns them.
@@ -22,7 +22,6 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 
 	// First pass: create all entities
 	var switches []*entities.Switch
-	var switchObjects []world.ObjectData
 
 	for _, obj := range objects {
 		switch obj.Type {
@@ -55,7 +54,6 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 			sw.SetToggleMode(obj.GetPropBool("toggle", true))
 			sw.SetOnce(obj.GetPropBool("once", false))
 			switches = append(switches, sw)
-			switchObjects = append(switchObjects, obj)
 			triggers = append(triggers, sw)
 			entityList = append(entityList, sw)
 
@@ -66,20 +64,20 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 			if startOpen {
 				door.Open()
 			}
+			// Register door with registry if available
+			if ctx.Registry != nil {
+				ctx.Registry.Register(door)
+			}
 			solidEnts = append(solidEnts, door)
 			entityList = append(entityList, door)
 		}
 	}
 
-	// Second pass: link switches to doors
-	for i, sw := range switches {
-		if sw.TargetID() != "" && ctx.GetDoor != nil {
-			door := ctx.GetDoor(sw.TargetID())
-			if door != nil {
-				sw.SetTargetDoor(door)
-			}
+	// Second pass: link switches to registry
+	for _, sw := range switches {
+		if sw.GetTargetID() != "" && ctx.Registry != nil {
+			sw.SetRegistry(ctx.Registry)
 		}
-		_ = switchObjects[i] // Available if needed
 	}
 
 	return entityList, triggers, solidEnts

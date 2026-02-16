@@ -185,17 +185,7 @@ func (s *Scene) loadEntities() {
 			s.state.TriggerComplete()
 			fmt.Println("Level Complete!")
 		},
-		GetDoor: func(id string) *entities.Door {
-			// Find door by ID in solid entities
-			for _, e := range s.entityWorld.SolidEntities() {
-				if door, ok := e.(*entities.Door); ok {
-					if door.GetID() == id {
-						return door
-					}
-				}
-			}
-			return nil
-		},
+		Registry: s.entityWorld.TargetRegistry,
 	}
 
 	// Spawn entities
@@ -464,11 +454,15 @@ func (s *Scene) Draw(screen *ebiten.Image) {
 	// Fill background
 	screen.Fill(backgroundColor)
 
+	// Create render context
+	ctx := world.NewRenderContext(s.camera, screen, 1.0/60.0)
+	ctx.Debug = s.showDebugEntities
+
 	// Draw map with camera offset
-	s.renderer.Draw(screen, s.camera.X, s.camera.Y)
+	s.renderer.DrawWithContext(screen, ctx)
 
 	// Draw entities
-	s.entityWorld.Draw(screen, s.camera.X, s.camera.Y)
+	s.entityWorld.DrawWithContext(screen, ctx)
 
 	// Draw player
 	s.drawPlayer(screen)
@@ -488,8 +482,8 @@ func (s *Scene) Draw(screen *ebiten.Image) {
 	}
 	if s.showDebugEntities {
 		s.debugRenderer.ShowAll = true
-		s.debugRenderer.Draw(screen, s.entityWorld, s.camera.X, s.camera.Y)
-		s.debugRenderer.DrawPlayerDebug(screen, s.playerBody, s.camera.X, s.camera.Y)
+		s.debugRenderer.DrawWithContext(screen, s.entityWorld, ctx)
+		s.debugRenderer.DrawPlayerDebugWithContext(screen, s.playerBody, ctx)
 	}
 
 	// Draw state overlay

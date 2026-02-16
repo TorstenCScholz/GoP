@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // Door is a SolidEntity that can open and close.
@@ -41,6 +42,7 @@ func (d *Door) Update(dt float64) {
 }
 
 // Draw implements Entity.
+// Deprecated: Use DrawWithContext for new implementations.
 func (d *Door) Draw(screen *ebiten.Image, camX, camY float64) {
 	if d.isOpen {
 		// Draw open door (outline only)
@@ -55,6 +57,32 @@ func (d *Door) Draw(screen *ebiten.Image, camX, camY float64) {
 		// Draw closed door (solid)
 		x := d.body.PosX - camX
 		y := d.body.PosY - camY
+		doorColor := color.RGBA{139, 90, 43, 255} // Brown
+		ebitenutil.DrawRect(screen, x, y, d.body.W, d.body.H, doorColor)
+
+		// Draw border
+		borderColor := color.RGBA{80, 50, 20, 255}
+		ebitenutil.DrawRect(screen, x, y, d.body.W, 2, borderColor)
+		ebitenutil.DrawRect(screen, x, y+d.body.H-2, d.body.W, 2, borderColor)
+		ebitenutil.DrawRect(screen, x, y, 2, d.body.H, borderColor)
+		ebitenutil.DrawRect(screen, x+d.body.W-2, y, 2, d.body.H, borderColor)
+	}
+}
+
+// DrawWithContext implements Entity.
+func (d *Door) DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext) {
+	// Use WorldToScreen for coordinate conversion
+	x, y := ctx.WorldToScreen(d.body.PosX, d.body.PosY)
+
+	if d.isOpen {
+		// Draw open door (outline only)
+		outlineColor := color.RGBA{100, 100, 100, 255}
+		ebitenutil.DrawRect(screen, x, y, d.closedW, 2, outlineColor)
+		ebitenutil.DrawRect(screen, x, y+d.closedH-2, d.closedW, 2, outlineColor)
+		ebitenutil.DrawRect(screen, x, y, 2, d.closedH, outlineColor)
+		ebitenutil.DrawRect(screen, x+d.closedW-2, y, 2, d.closedH, outlineColor)
+	} else {
+		// Draw closed door (solid)
 		doorColor := color.RGBA{139, 90, 43, 255} // Brown
 		ebitenutil.DrawRect(screen, x, y, d.body.W, d.body.H, doorColor)
 
@@ -108,4 +136,19 @@ func (d *Door) Toggle() {
 	} else {
 		d.Open()
 	}
+}
+
+// Activate implements Targetable - opens the door.
+func (d *Door) Activate() {
+	d.Open()
+}
+
+// Deactivate implements Targetable - closes the door.
+func (d *Door) Deactivate() {
+	d.Close()
+}
+
+// TargetID implements Targetable - returns the door's unique identifier.
+func (d *Door) TargetID() string {
+	return d.id
 }

@@ -4,6 +4,7 @@ package entities
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/world"
 )
 
 // Entity is the base interface for all game entities.
@@ -13,7 +14,12 @@ type Entity interface {
 	Update(dt float64)
 
 	// Draw renders the entity to screen with camera offset.
+	// Deprecated: Use DrawWithContext for new implementations.
 	Draw(screen *ebiten.Image, camX, camY float64)
+
+	// DrawWithContext renders the entity using a RenderContext.
+	// This is the preferred method for rendering entities.
+	DrawWithContext(screen *ebiten.Image, ctx *world.RenderContext)
 
 	// Bounds returns the entity's AABB for overlap queries.
 	Bounds() physics.AABB
