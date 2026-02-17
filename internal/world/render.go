@@ -14,9 +14,9 @@ type Camera struct {
 // NewCamera creates a new camera with the given viewport size.
 func NewCamera(viewWidth, viewHeight int) *Camera {
 	return &Camera{
-		X:         0,
-		Y:         0,
-		ViewWidth: viewWidth,
+		X:          0,
+		Y:          0,
+		ViewWidth:  viewWidth,
 		ViewHeight: viewHeight,
 	}
 }
@@ -65,7 +65,7 @@ func (c *Camera) ScreenToWorld(sx, sy float64) (wx, wy float64) {
 
 // MapRenderer handles rendering a map with camera support.
 type MapRenderer struct {
-	m  *Map
+	m   *Map
 	cam *Camera
 }
 
@@ -95,7 +95,7 @@ func (r *MapRenderer) Draw(screen *ebiten.Image, camX, camY float64) {
 	// Calculate visible tile range
 	tx1 := int(camX) / tileW
 	ty1 := int(camY) / tileH
-	
+
 	// Add 1 to ensure we cover tiles partially visible
 	tx2 := (int(camX) + screen.Bounds().Dx() + tileW - 1) / tileW
 	ty2 := (int(camY) + screen.Bounds().Dy() + tileH - 1) / tileH
@@ -116,6 +116,9 @@ func (r *MapRenderer) Draw(screen *ebiten.Image, camX, camY float64) {
 
 	// Draw each layer
 	for _, layer := range r.m.layers {
+		if layer.Name() == "Collision" {
+			continue // Don't render collision layer
+		}
 		for ty := ty1; ty < ty2; ty++ {
 			for tx := tx1; tx < tx2; tx++ {
 				tileID := layer.TileAt(tx, ty)

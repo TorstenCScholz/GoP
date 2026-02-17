@@ -60,10 +60,6 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 
 			switch tileID {
 			case 0:
-				// Empty/transparent
-				c = color.RGBA{0, 0, 0, 0}
-
-			case 1:
 				// Grass top - green on top, brown on bottom
 				if py < 4 {
 					// Green grass
@@ -73,7 +69,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{139, 90, 43, 255} // Saddle brown
 				}
 
-			case 2:
+			case 1:
 				// Dirt - solid brown
 				c = color.RGBA{139, 90, 43, 255}
 				// Add some variation
@@ -81,7 +77,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{120, 80, 35, 255}
 				}
 
-			case 3:
+			case 2:
 				// Stone - gray with texture
 				base := uint8(128)
 				variation := int8(((px*3 + py*7) % 40) - 20)
@@ -96,7 +92,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{100, 100, 100, 255}
 				}
 
-			case 4:
+			case 3:
 				// Brick - red-brown brick pattern
 				// Determine brick row
 				brickRow := py / 4
@@ -117,7 +113,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					}
 				}
 
-			case 5:
+			case 4:
 				// Grass variant with flowers
 				if py < 4 {
 					c = color.RGBA{34, 139, 34, 255}
@@ -129,7 +125,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{139, 90, 43, 255}
 				}
 
-			case 6:
+			case 5:
 				// Stone variant with moss
 				base := uint8(128)
 				variation := int8(((px*3 + py*7) % 40) - 20)
@@ -144,7 +140,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{60, 120, 60, 255}
 				}
 
-			case 7:
+			case 6:
 				// Dark brick
 				brickRow := py / 4
 				brickOffset := 0
@@ -159,7 +155,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{120, 60, 40, 255}
 				}
 
-			case 8:
+			case 7:
 				// Wood planks
 				if px%4 == 0 {
 					c = color.RGBA{100, 70, 40, 255} // Gap
@@ -171,14 +167,14 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					}
 				}
 
-			case 9:
+			case 8:
 				// Sand
 				c = color.RGBA{238, 214, 175, 255}
 				if (px*2+py*3)%7 == 0 {
 					c = color.RGBA{220, 200, 160, 255}
 				}
 
-			case 10:
+			case 9:
 				// Water (solid blue for now)
 				c = color.RGBA{65, 105, 225, 255}
 				// Wave pattern
@@ -186,7 +182,7 @@ func drawTile(img *image.RGBA, tx, ty, tileID int) {
 					c = color.RGBA{100, 149, 237, 255}
 				}
 
-			case 11:
+			case 10:
 				// Lava
 				c = color.RGBA{255, 80, 0, 255}
 				if (px*2+py)%4 < 2 {

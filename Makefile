@@ -1,7 +1,7 @@
 .PHONY: run test fmt tidy build
 
 run:
-	go run ./cmd/hello
+	go run ./cmd/game
 
 test:
 	go test ./...
@@ -13,4 +13,4 @@ tidy:
 	go mod tidy
 
 build:
-	go build -o bin/hello ./cmd/hello
+	go build -o bin/game ./cmd/game
