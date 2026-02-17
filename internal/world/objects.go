@@ -81,8 +81,9 @@ type tiledObject struct {
 	Width      float64         `json:"width"`
 	Height     float64         `json:"height"`
 	Properties []tiledProperty `json:"properties"`
-	// Visible defaults to true if not present
-	Visible bool `json:"visible"`
+	// TODO: this seems like an anti-pattern. or at least, no one will understand this. we need to fix this properly.
+	// Visible is a pointer to detect missing field (Tiled default is visible=true)
+	Visible *bool `json:"visible"`
 }
 
 // tiledProperty represents a Tiled custom property.
@@ -124,8 +125,14 @@ func ParseObjects(data []byte) ([]ObjectData, error) {
 		}
 
 		for _, obj := range layer.Objects {
+			// Default to visible=true if the property is missing (Tiled's default behavior)
+			visible := true
+			if obj.Visible != nil && !*obj.Visible {
+				visible = false
+			}
+
 			// Skip invisible objects
-			if obj.Visible == false && obj.Type != "" {
+			if !visible && obj.Type != "" {
 				continue
 			}
 
@@ -135,18 +142,10 @@ func ParseObjects(data []byte) ([]ObjectData, error) {
 				props[prop.Name] = prop.Value
 			}
 
-			// Handle default visibility (true if not specified)
-			visible := true
-			if obj.Visible == false {
-				visible = false
-			}
-
 			// Only include objects with a valid type
 			if obj.Type == "" {
 				continue
 			}
-
-			_ = visible // Used for filtering above
 
 			data := ObjectData{
 				ID:    obj.ID,
