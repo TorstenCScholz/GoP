@@ -4043,54 +4043,12 @@
         {
           "height": 16,
           "id": 10,
-          "name": "Platform_Horizontal",
+          "name": "Platform_Bridge",
           "properties": [
             {
               "name": "id",
               "type": "string",
-              "value": "p1"
-            },
-            {
-              "name": "endX",
-              "type": "float",
-              "value": 208
-            },
-            {
-              "name": "endY",
-              "type": "float",
-              "value": 0
-            },
-            {
-              "name": "speed",
-              "type": "float",
-              "value": 60
-            },
-            {
-              "name": "waitTime",
-              "type": "float",
-              "value": 1
-            },
-            {
-              "name": "pushPlayer",
-              "type": "bool",
-              "value": false
-            }
-          ],
-          "type": "platform",
-          "visible": true,
-          "width": 80,
-          "x": 96,
-          "y": 288
-        },
-        {
-          "height": 16,
-          "id": 14,
-          "name": "Platform_Push",
-          "properties": [
-            {
-              "name": "id",
-              "type": "string",
-              "value": "p5"
+              "value": "bridge1"
             },
             {
               "name": "endX",
@@ -4100,17 +4058,17 @@
             {
               "name": "endY",
               "type": "float",
-              "value": -128
+              "value": 0
             },
             {
               "name": "speed",
               "type": "float",
-              "value": 60
+              "value": 64
             },
             {
               "name": "waitTime",
               "type": "float",
-              "value": 1
+              "value": 0.75
             },
             {
               "name": "pushPlayer",
@@ -4120,19 +4078,19 @@
           ],
           "type": "platform",
           "visible": true,
-          "width": 80,
-          "x": 656,
-          "y": 336
+          "width": 96,
+          "x": 464,
+          "y": 304
         },
         {
           "height": 16,
           "id": 20,
-          "name": "Switch_Toggle",
+          "name": "Switch_Gate_A",
           "properties": [
             {
               "name": "door_id",
               "type": "string",
-              "value": "door1"
+              "value": "gate_a"
             },
             {
               "name": "toggle",
@@ -4142,59 +4100,32 @@
             {
               "name": "once",
               "type": "bool",
-              "value": false
+              "value": true
             }
           ],
           "type": "switch",
           "visible": true,
           "width": 32,
-          "x": 352,
+          "x": 208,
           "y": 336
         },
         {
           "height": 16,
           "id": 21,
-          "name": "Switch_HoldOpen",
+          "name": "Switch_Gate_B",
           "properties": [
             {
               "name": "door_id",
               "type": "string",
-              "value": "door2"
+              "value": "gate_b"
             },
             {
               "name": "toggle",
               "type": "bool",
-              "value": false
+              "value": true
             },
             {
               "name": "once",
-              "type": "bool",
-              "value": false
-            }
-          ],
-          "type": "switch",
-          "visible": true,
-          "width": 32,
-          "x": 432,
-          "y": 336
-        },
-        {
-          "height": 16,
-          "id": 23,
-          "name": "Switch_MultiA",
-          "properties": [
-            {
-              "name": "once",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "door_id",
-              "type": "string",
-              "value": "door4"
-            },
-            {
-              "name": "toggle",
               "type": "bool",
               "value": true
             }
@@ -4202,13 +4133,13 @@
           "type": "switch",
           "visible": true,
           "width": 32,
-          "x": 592,
+          "x": 944,
           "y": 336
         },
         {
           "height": 64,
           "id": 30,
-          "name": "Door_Toggle",
+          "name": "Door_Gate_A",
           "properties": [
             {
               "name": "startOpen",
@@ -4218,24 +4149,24 @@
             {
               "name": "id",
               "type": "string",
-              "value": "door1"
+              "value": "gate_a"
             }
           ],
           "type": "door",
           "visible": true,
           "width": 32,
-          "x": 368,
+          "x": 320,
           "y": 272
         },
         {
           "height": 64,
           "id": 31,
-          "name": "Door_HoldOpen",
+          "name": "Door_Gate_B",
           "properties": [
             {
               "name": "id",
               "type": "string",
-              "value": "door2"
+              "value": "gate_b"
             },
             {
               "name": "startOpen",
@@ -4246,120 +4177,54 @@
           "type": "door",
           "visible": true,
           "width": 32,
-          "x": 448,
-          "y": 272
-        },
-        {
-          "height": 64,
-          "id": 33,
-          "name": "Door_MultiSwitch",
-          "properties": [
-            {
-              "name": "id",
-              "type": "string",
-              "value": "door4"
-            },
-            {
-              "name": "startOpen",
-              "type": "bool",
-              "value": false
-            }
-          ],
-          "type": "door",
-          "visible": true,
-          "width": 32,
-          "x": 608,
+          "x": 1056,
           "y": 272
         },
         {
           "height": 16,
           "id": 40,
-          "name": "Hazard_Ground1",
+          "name": "Hazard_Pit_Main",
           "type": "hazard",
           "visible": true,
-          "width": 48,
-          "x": 688,
+          "width": 336,
+          "x": 480,
           "y": 336
         },
         {
           "height": 16,
           "id": 41,
-          "name": "Hazard_Ground2",
+          "name": "Hazard_Pit_Exit",
           "type": "hazard",
           "visible": true,
-          "width": 32,
-          "x": 768,
+          "width": 64,
+          "x": 848,
           "y": 336
         },
         {
           "height": 16,
           "id": 42,
-          "name": "Hazard_Elevated",
+          "name": "Hazard_Final",
           "type": "hazard",
           "visible": true,
-          "width": 64,
-          "x": 848,
-          "y": 256
-        },
-        {
-          "height": 16,
-          "id": 43,
-          "name": "Hazard_Timing",
-          "type": "hazard",
-          "visible": true,
-          "width": 32,
-          "x": 944,
-          "y": 208
+          "width": 80,
+          "x": 1120,
+          "y": 336
         },
         {
           "height": 64,
           "id": 50,
-          "name": "Checkpoint_1",
+          "name": "Checkpoint_Mid",
           "properties": [
             {
               "name": "id",
               "type": "string",
-              "value": "cp1"
+              "value": "cp_mid"
             }
           ],
           "type": "checkpoint",
           "visible": true,
           "width": 32,
-          "x": 528,
-          "y": 288
-        },
-        {
-          "height": 64,
-          "id": 52,
-          "name": "Checkpoint_3",
-          "properties": [
-            {
-              "name": "id",
-              "type": "string",
-              "value": "cp3"
-            }
-          ],
-          "type": "checkpoint",
-          "visible": true,
-          "width": 32,
-          "x": 912,
-          "y": 288
-        },
-        {
-          "height": 64,
-          "id": 53,
-          "name": "Checkpoint_4",
-          "properties": [
-            {
-              "name": "id",
-              "type": "string",
-              "value": "cp4"
-            }
-          ],
-          "type": "checkpoint",
-          "visible": true,
-          "width": 32,
-          "x": 1088,
+          "x": 896,
           "y": 288
         },
         {
@@ -4369,7 +4234,7 @@
           "type": "goal",
           "visible": true,
           "width": 32,
-          "x": 1200,
+          "x": 1232,
           "y": 288
         },
         {
@@ -4379,8 +4244,8 @@
           "type": "spawn",
           "visible": true,
           "width": 32,
-          "x": 47.189189189189136,
-          "y": 319.1891891891891
+          "x": 48,
+          "y": 320
         }
       ]
     }
