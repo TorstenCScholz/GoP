@@ -25,4 +25,5 @@ go.work
 
 # Build output
 bin/
-game
+/game
+/editor
