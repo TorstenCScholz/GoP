@@ -638,74 +638,12 @@ func (p *PlaytestController) resolveCollisions(aabb physics.AABB) []physics.Coll
 		}
 	}
 
-	// Check solid entities
-	for _, e := range p.entityWorld.SolidEntities() {
-		entityBounds := e.Bounds()
-		if entityBounds.W == 0 || entityBounds.H == 0 {
-			continue
-		}
-
-		if aabb.Intersects(entityBounds) {
-			overlapLeft := (aabb.X + aabb.W) - entityBounds.X
-			overlapRight := (entityBounds.X + entityBounds.W) - aabb.X
-			overlapTop := (aabb.Y + aabb.H) - entityBounds.Y
-			overlapBottom := (entityBounds.Y + entityBounds.H) - aabb.Y
-
-			minOverlapX := overlapLeft
-			normalX := -1.0
-			if overlapRight < overlapLeft {
-				minOverlapX = overlapRight
-				normalX = 1.0
-			}
-
-			minOverlapY := overlapTop
-			normalY := -1.0
-			if overlapBottom < overlapTop {
-				minOverlapY = overlapBottom
-				normalY = 1.0
-			}
-
-			var col physics.Collision
-			col.TileX = -1
-			col.TileY = -1
-			if minOverlapX < minOverlapY {
-				col.NormalX = normalX
-				col.NormalY = 0
-			} else {
-				col.NormalX = 0
-				col.NormalY = normalY
-			}
-
-			collisions = append(collisions, col)
-		}
-	}
-
 	return collisions
 }
 
 // resolveSolidEntityCollisions resolves player collision against solid entities.
 func (p *PlaytestController) resolveSolidEntityCollisions() {
-	var solidAABBs []physics.AABB
-
-	for _, e := range p.entityWorld.SolidEntities() {
-		if !e.IsActive() {
-			continue
-		}
-		bounds := e.Bounds()
-		if bounds.W > 0 && bounds.H > 0 {
-			solidAABBs = append(solidAABBs, bounds)
-		}
-	}
-
-	for _, k := range p.entityWorld.GetKinematics() {
-		if !k.IsActive() {
-			continue
-		}
-		body := k.GetBody()
-		if body != nil && body.W > 0 && body.H > 0 {
-			solidAABBs = append(solidAABBs, body.AABB())
-		}
-	}
+	solidAABBs := p.entityWorld.ActiveSolidAABBs()
 
 	if len(solidAABBs) > 0 {
 		physics.ResolveSolids(p.playerBody, solidAABBs)

@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 
@@ -232,9 +233,12 @@ func (p *MovingPlatform) GetDebugInfo() string {
 	if !p.goingToEnd {
 		direction = "B→A"
 	}
-	return string("Platform[" + p.id + "] " + direction +
-		" vel=(" + string(int(p.velocityX)) + "," + string(int(p.velocityY)) + ")" +
-		" wait=" + string(int(p.waitTimer*1000)) + "ms")
+	return fmt.Sprintf("Platform[%s] %s vel=(%.0f,%.0f) wait=%.0fms",
+		p.id,
+		direction,
+		p.velocityX,
+		p.velocityY,
+		p.waitTimer*1000)
 }
 
 // SetWaitTime sets the time to wait at endpoints.

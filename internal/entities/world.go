@@ -94,6 +94,40 @@ func (w *EntityWorld) GetKinematics() []physics.Kinematic {
 	return w.kinematics
 }
 
+// ActiveSolidAABBs returns unique AABBs for all active solid bodies.
+// Kinematics are included, but bodies already present in solid entities are deduplicated.
+func (w *EntityWorld) ActiveSolidAABBs() []physics.AABB {
+	var solids []physics.AABB
+	seenBodies := make(map[*physics.Body]struct{})
+
+	addBody := func(body *physics.Body) {
+		if body == nil || body.W <= 0 || body.H <= 0 {
+			return
+		}
+		if _, seen := seenBodies[body]; seen {
+			return
+		}
+		seenBodies[body] = struct{}{}
+		solids = append(solids, body.AABB())
+	}
+
+	for _, e := range w.solidEnts {
+		if !e.IsActive() {
+			continue
+		}
+		addBody(e.GetBody())
+	}
+
+	for _, k := range w.kinematics {
+		if !k.IsActive() {
+			continue
+		}
+		addBody(k.GetBody())
+	}
+
+	return solids
+}
+
 // UpdateKinematics updates all kinematic entities with collision detection.
 func (w *EntityWorld) UpdateKinematics(collisionMap *world.CollisionMap, dt float64) {
 	for _, k := range w.kinematics {

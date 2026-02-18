@@ -338,82 +338,13 @@ func (s *Scene) resolveCollisions(aabb physics.AABB) []physics.Collision {
 		}
 	}
 
-	// Check solid entities (doors, etc.)
-	for _, e := range s.entityWorld.SolidEntities() {
-		entityBounds := e.Bounds()
-		if entityBounds.W == 0 || entityBounds.H == 0 {
-			// Skip entities with no collision (e.g., open doors)
-			continue
-		}
-
-		if aabb.Intersects(entityBounds) {
-			// Calculate collision normal
-			overlapLeft := (aabb.X + aabb.W) - entityBounds.X
-			overlapRight := (entityBounds.X + entityBounds.W) - aabb.X
-			overlapTop := (aabb.Y + aabb.H) - entityBounds.Y
-			overlapBottom := (entityBounds.Y + entityBounds.H) - aabb.Y
-
-			// Find minimum overlap axis
-			minOverlapX := overlapLeft
-			normalX := -1.0
-			if overlapRight < overlapLeft {
-				minOverlapX = overlapRight
-				normalX = 1.0
-			}
-
-			minOverlapY := overlapTop
-			normalY := -1.0
-			if overlapBottom < overlapTop {
-				minOverlapY = overlapBottom
-				normalY = 1.0
-			}
-
-			// Use the axis with minimum overlap
-			var col physics.Collision
-			col.TileX = -1 // Mark as entity collision
-			col.TileY = -1
-			if minOverlapX < minOverlapY {
-				col.NormalX = normalX
-				col.NormalY = 0
-			} else {
-				col.NormalX = 0
-				col.NormalY = normalY
-			}
-
-			collisions = append(collisions, col)
-		}
-	}
-
 	return collisions
 }
 
 // resolveSolidEntityCollisions resolves player collision against solid entities.
 // This is called after tile collision to handle entity-specific collision.
 func (s *Scene) resolveSolidEntityCollisions() {
-	// Collect AABBs of all active solid entities
-	var solidAABBs []physics.AABB
-
-	// Add regular solid entities
-	for _, e := range s.entityWorld.SolidEntities() {
-		if !e.IsActive() {
-			continue
-		}
-		bounds := e.Bounds()
-		if bounds.W > 0 && bounds.H > 0 {
-			solidAABBs = append(solidAABBs, bounds)
-		}
-	}
-
-	// Add kinematic entities (platforms)
-	for _, k := range s.entityWorld.GetKinematics() {
-		if !k.IsActive() {
-			continue
-		}
-		body := k.GetBody()
-		if body != nil && body.W > 0 && body.H > 0 {
-			solidAABBs = append(solidAABBs, body.AABB())
-		}
-	}
+	solidAABBs := s.entityWorld.ActiveSolidAABBs()
 
 	// Resolve against all solids
 	if len(solidAABBs) > 0 {
