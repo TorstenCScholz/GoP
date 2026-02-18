@@ -661,6 +661,8 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 	// Calculate the screen position of the map boundaries
 	mapRightWorld := float64(mapWidth * tileW)
 	mapBottomWorld := float64(mapHeight * tileH)
+	mapLeftScreen := (0 - camX) * zoom
+	mapTopScreen := (0 - camY) * zoom
 	mapRightScreen := (mapRightWorld - camX) * zoom
 	mapBottomScreen := (mapBottomWorld - camY) * zoom
 
@@ -673,13 +675,20 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			continue
 		}
 
-		// Calculate line height (don't extend beyond map bottom)
+		// Calculate line height (clamp to map top and bottom)
 		lineTop := 0.0
 		lineBottom := float64(screenHeight)
+
+		// Clamp to map top boundary
+		if mapTopScreen > lineTop {
+			lineTop = mapTopScreen
+		}
+		// Clamp to map bottom boundary
 		if mapBottomScreen < lineBottom {
 			lineBottom = mapBottomScreen
 		}
-		if lineBottom <= 0 {
+
+		if lineBottom <= lineTop {
 			continue
 		}
 
@@ -701,13 +710,20 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			continue
 		}
 
-		// Calculate line width (don't extend beyond map right edge)
+		// Calculate line width (clamp to map left and right)
 		lineLeft := 0.0
 		lineRight := float64(canvasWidth)
+
+		// Clamp to map left boundary
+		if mapLeftScreen > lineLeft {
+			lineLeft = mapLeftScreen
+		}
+		// Clamp to map right boundary
 		if mapRightScreen < lineRight {
 			lineRight = mapRightScreen
 		}
-		if lineRight <= 0 {
+
+		if lineRight <= lineLeft {
 			continue
 		}
 

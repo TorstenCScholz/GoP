@@ -157,16 +157,26 @@ func (c *Camera) Update(dt float64) {
 		maxX := c.LevelW - float64(c.ViewportW)
 		maxY := c.LevelH - float64(c.ViewportH)
 
-		if c.X < 0 {
-			c.X = 0
-		} else if c.X > maxX {
-			c.X = maxX
+		if maxX < 0 {
+			// Level narrower than viewport: center horizontally
+			c.X = maxX / 2
+		} else {
+			if c.X < 0 {
+				c.X = 0
+			} else if c.X > maxX {
+				c.X = maxX
+			}
 		}
 
-		if c.Y < 0 {
-			c.Y = 0
-		} else if c.Y > maxY {
-			c.Y = maxY
+		if maxY < 0 {
+			// Level shorter than viewport: center vertically
+			c.Y = maxY / 2
+		} else {
+			if c.Y < 0 {
+				c.Y = 0
+			} else if c.Y > maxY {
+				c.Y = maxY
+			}
 		}
 	}
 

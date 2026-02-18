@@ -755,6 +755,11 @@ func (a *App) Playtest() *PlaytestController {
 	return a.playtest
 }
 
+// ScreenSize returns the current screen dimensions.
+func (a *App) ScreenSize() (width, height int) {
+	return a.screenWidth, a.screenHeight
+}
+
 // drawHelpOverlay draws the keyboard shortcuts reference panel.
 func (a *App) drawHelpOverlay(screen *ebiten.Image) {
 	screenWidth, screenHeight := screen.Size()

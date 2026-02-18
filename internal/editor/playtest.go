@@ -318,6 +318,8 @@ func (p *PlaytestController) Layout(outsideW, outsideH int) (int, int) {
 	if p.camera != nil {
 		p.camera.ViewportW = outsideW
 		p.camera.ViewportH = outsideH
+		// Note: Deadzone is set once in buildGameScene() and should not be modified here
+		// as it can cause camera position changes during rendering
 	}
 	return outsideW, outsideH
 }
@@ -349,7 +351,14 @@ func (p *PlaytestController) buildGameScene() error {
 	// Create renderer
 	p.renderer = world.NewMapRenderer(p.tileMap)
 
-	// Create camera
+	// Get screen dimensions from editor if not already set
+	if p.width == 0 || p.height == 0 {
+		editorWidth, editorHeight := p.editor.ScreenSize()
+		p.width = editorWidth
+		p.height = editorHeight
+	}
+
+	// Create camera with proper viewport dimensions
 	p.camera = camera.NewCamera(p.width, p.height)
 	p.camera.SetDeadzoneCentered(0.25, 0.4)
 	p.camera.SetLevelBounds(float64(p.tileMap.PixelWidth()), float64(p.tileMap.PixelHeight()))
@@ -377,6 +386,11 @@ func (p *PlaytestController) buildGameScene() error {
 
 	// Load entities from editor objects
 	p.loadEntitiesFromEditor(state.Objects)
+
+	// Initialize camera position to center on player spawn point
+	// This prevents flickering on the first frames
+	p.camera.X = p.playerBody.PosX - float64(p.camera.ViewportW)/2
+	p.camera.Y = p.playerBody.PosY - float64(p.camera.ViewportH)/2
 
 	// Initialize sprite
 	if err := p.initSprite(); err != nil {
