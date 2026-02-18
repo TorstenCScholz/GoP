@@ -122,6 +122,9 @@ func (a *App) Update() error {
 	// Handle minimap click for navigation
 	a.handleMinimapInput()
 
+	// Update status message timer
+	a.state.UpdateStatusMessage()
+
 	return nil
 }
 
@@ -347,7 +350,7 @@ func (a *App) handleToolShortcuts() {
 		log.Printf("Layer %s visibility: %v", a.state.CurrentLayer, visible)
 	}
 
-	// Delete/Backspace - Delete selected object(s)
+	// Delete/Backspace - Delete selected object(s) or hovered tile in erase mode
 	if inpututil.IsKeyJustPressed(ebiten.KeyDelete) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
 		selection := a.state.GetSelectionManager()
 		if selection != nil && selection.HasSelection() {
@@ -372,6 +375,15 @@ func (a *App) handleToolShortcuts() {
 				a.state.ClearSelection()
 				selection.ClearSelection()
 				log.Printf("Deleted selected object: %s", objType)
+			}
+		} else if a.state.CurrentTool == ToolErase {
+			// In erase mode, delete the hovered tile
+			tileX, tileY := a.canvas.HoveredTile()
+			if tileX >= 0 && tileY >= 0 {
+				// Create an erase action for the hovered tile
+				action := NewEraseTileAction(a.state, a.state.CurrentLayer, tileX, tileY)
+				a.state.History.Do(action, a.state)
+				log.Printf("Erased tile at (%d, %d)", tileX, tileY)
 			}
 		}
 	}
@@ -479,10 +491,16 @@ func (a *App) newLevel() {
 func (a *App) openLevel() {
 	// TODO: Check for unsaved changes and prompt user
 
-	// Use hardcoded path for now (will add file dialogs later)
-	state, err := OpenLevel(DefaultLevelPath)
+	// Use the current file path if set, otherwise use default
+	path := a.state.FilePath
+	if path == "" {
+		path = DefaultLevelPath
+	}
+
+	state, err := OpenLevel(path)
 	if err != nil {
 		log.Printf("Failed to open level: %v", err)
+		a.state.ShowStatusMessage(fmt.Sprintf("Failed to open: %v", err), true)
 		return
 	}
 
@@ -494,12 +512,14 @@ func (a *App) openLevel() {
 	// Update properties panel with new state
 	a.propertiesPanel.SetState(a.state)
 	log.Printf("Opened level: %s", a.state.FilePath)
+	a.state.ShowStatusMessage(fmt.Sprintf("Opened: %s", a.state.FilePath), false)
 }
 
 // saveLevel saves the current level.
 func (a *App) saveLevel() {
 	if !a.state.HasLevel() {
 		log.Println("No level to save")
+		a.state.ShowStatusMessage("No level to save", true)
 		return
 	}
 
@@ -529,16 +549,19 @@ func (a *App) saveLevel() {
 
 	if err := SaveLevel(a.state); err != nil {
 		log.Printf("Failed to save level: %v", err)
+		a.state.ShowStatusMessage(fmt.Sprintf("Failed to save: %v", err), true)
 		return
 	}
 
 	log.Printf("Saved level: %s", a.state.FilePath)
+	a.state.ShowStatusMessage(fmt.Sprintf("Saved: %s", a.state.FilePath), false)
 }
 
 // saveLevelAs saves the current level to a new file.
 func (a *App) saveLevelAs() {
 	if !a.state.HasLevel() {
 		log.Println("No level to save")
+		a.state.ShowStatusMessage("No level to save", true)
 		return
 	}
 
@@ -551,10 +574,12 @@ func (a *App) saveLevelAs() {
 
 	if err := SaveLevelAs(a.state, path); err != nil {
 		log.Printf("Failed to save level: %v", err)
+		a.state.ShowStatusMessage(fmt.Sprintf("Failed to save: %v", err), true)
 		return
 	}
 
 	log.Printf("Saved level as: %s", a.state.FilePath)
+	a.state.ShowStatusMessage(fmt.Sprintf("Saved: %s", a.state.FilePath), false)
 }
 
 // Draw renders the editor to the screen.
@@ -592,6 +617,9 @@ func (a *App) Draw(screen *ebiten.Image) {
 
 	// Draw status bar at the bottom
 	a.drawStatusBar(screen)
+
+	// Draw status message if visible
+	a.drawStatusMessage(screen)
 
 	// Draw help overlay if visible
 	if a.showHelp {
@@ -813,4 +841,45 @@ func (a *App) drawMinimap(screen *ebiten.Image) {
 	if a.minimap != nil {
 		a.minimap.Draw(screen, a.state, a.camera)
 	}
+}
+
+// drawStatusMessage draws the status message overlay.
+func (a *App) drawStatusMessage(screen *ebiten.Image) {
+	if a.state.StatusMessage == nil {
+		return
+	}
+
+	msg := a.state.StatusMessage
+	screenWidth, screenHeight := screen.Size()
+
+	// Calculate message width (approximate)
+	msgWidth := len(msg.Text)*7 + 20
+	msgHeight := 30
+	msgX := (screenWidth - msgWidth) / 2
+	msgY := screenHeight - 60
+
+	// Choose color based on message type
+	bgColor := color.RGBA{40, 120, 40, 220} // Green for success
+	if msg.IsError {
+		bgColor = color.RGBA{160, 40, 40, 220} // Red for errors
+	}
+
+	// Draw background
+	msgImg := ebiten.NewImage(msgWidth, msgHeight)
+	msgImg.Fill(bgColor)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(msgX), float64(msgY))
+	screen.DrawImage(msgImg, op)
+
+	// Draw border
+	borderColor := color.RGBA{255, 255, 255, 200}
+	ebitenutil.DrawRect(screen, float64(msgX), float64(msgY), float64(msgWidth), 2, borderColor)
+	ebitenutil.DrawRect(screen, float64(msgX), float64(msgY+msgHeight-2), float64(msgWidth), 2, borderColor)
+	ebitenutil.DrawRect(screen, float64(msgX), float64(msgY), 2, float64(msgHeight), borderColor)
+	ebitenutil.DrawRect(screen, float64(msgX+msgWidth-2), float64(msgY), 2, float64(msgHeight), borderColor)
+
+	// Draw text
+	textX := msgX + 10
+	textY := msgY + 8
+	ebitenutil.DebugPrintAt(screen, msg.Text, textX, textY)
 }

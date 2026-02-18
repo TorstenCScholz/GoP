@@ -21,6 +21,13 @@ const (
 	ToolPlaceObject
 )
 
+// StatusMessage represents a status message to display to the user.
+type StatusMessage struct {
+	Text    string // The message text
+	IsError bool   // True if this is an error message
+	Timer   int    // Frames remaining to display the message
+}
+
 // EditorState holds all the state for the level editor.
 type EditorState struct {
 	// Level data
@@ -49,6 +56,9 @@ type EditorState struct {
 
 	// Selection manager reference (set by tool manager)
 	selectionManager *SelectionManager
+
+	// Status message for user feedback
+	StatusMessage *StatusMessage
 }
 
 // NewEditorState creates a new editor state with default values.
@@ -199,6 +209,30 @@ func (s *EditorState) GetSelectionManager() *SelectionManager {
 // SetSelectionManager sets the selection manager reference.
 func (s *EditorState) SetSelectionManager(sm *SelectionManager) {
 	s.selectionManager = sm
+}
+
+// ShowStatusMessage displays a status message to the user.
+func (s *EditorState) ShowStatusMessage(text string, isError bool) {
+	s.StatusMessage = &StatusMessage{
+		Text:    text,
+		IsError: isError,
+		Timer:   180, // Show for 3 seconds at 60 FPS
+	}
+}
+
+// UpdateStatusMessage updates the status message timer.
+func (s *EditorState) UpdateStatusMessage() {
+	if s.StatusMessage != nil {
+		s.StatusMessage.Timer--
+		if s.StatusMessage.Timer <= 0 {
+			s.StatusMessage = nil
+		}
+	}
+}
+
+// ClearStatusMessage clears the current status message.
+func (s *EditorState) ClearStatusMessage() {
+	s.StatusMessage = nil
 }
 
 // selectionManager is stored separately for clipboard access

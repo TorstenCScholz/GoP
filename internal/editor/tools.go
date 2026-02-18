@@ -479,6 +479,7 @@ func (t *SelectTool) GetHoverHandle(state *EditorState, worldX, worldY float64) 
 // PlaceObjectTool handles placing new objects in the level.
 type PlaceObjectTool struct {
 	objectPalette *ObjectPalette
+	state         *EditorState // Reference to editor state for tool switching
 }
 
 // NewPlaceObjectTool creates a new place object tool.
@@ -486,6 +487,11 @@ func NewPlaceObjectTool(palette *ObjectPalette) *PlaceObjectTool {
 	return &PlaceObjectTool{
 		objectPalette: palette,
 	}
+}
+
+// SetState sets the editor state reference.
+func (t *PlaceObjectTool) SetState(state *EditorState) {
+	t.state = state
 }
 
 // OnMouseDown places a new object at the clicked position.
@@ -496,6 +502,11 @@ func (t *PlaceObjectTool) OnMouseDown(state *EditorState, tileX, tileY int, worl
 
 	// Get the selected object type from the palette
 	objType := t.objectPalette.SelectedType()
+
+	// If no object type is selected, do nothing
+	if objType == "" {
+		return
+	}
 
 	// Create a new object with default properties
 	obj := CreateDefaultObject(objType, worldX, worldY)
@@ -511,6 +522,12 @@ func (t *PlaceObjectTool) OnMouseDown(state *EditorState, tileX, tileY int, worl
 	state.History.Do(action, state)
 
 	log.Printf("Placed %s at (%.0f, %.0f)", objType, worldX, worldY)
+
+	// Deselect the object type in the palette
+	t.objectPalette.ClearSelection()
+
+	// Switch back to Select tool
+	state.SetTool(ToolSelect)
 }
 
 // OnMouseMove does nothing for place object tool.
@@ -556,6 +573,13 @@ func NewToolManager() *ToolManager {
 // SetObjectPalette sets the object palette for the place object tool.
 func (tm *ToolManager) SetObjectPalette(palette *ObjectPalette) {
 	tm.placeObjectTool = NewPlaceObjectTool(palette)
+}
+
+// SetState sets the editor state for tools that need it.
+func (tm *ToolManager) SetState(state *EditorState) {
+	if tm.placeObjectTool != nil {
+		tm.placeObjectTool.SetState(state)
+	}
 }
 
 // SelectTool returns the select tool for external access.

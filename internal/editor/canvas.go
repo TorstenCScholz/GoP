@@ -21,11 +21,13 @@ type Canvas struct {
 	mousePressed  bool
 	hoverHandle   HandlePosition    // Current handle being hovered
 	validation    *ValidationResult // Current validation result
+	hoveredTileX  int               // Currently hovered tile X coordinate
+	hoveredTileY  int               // Currently hovered tile Y coordinate
 }
 
 // NewCanvas creates a new canvas for rendering the tilemap.
 func NewCanvas(state *EditorState, camera *Camera, tileset *Tileset) *Canvas {
-	return &Canvas{
+	c := &Canvas{
 		state:         state,
 		camera:        camera,
 		tileset:       tileset,
@@ -34,7 +36,12 @@ func NewCanvas(state *EditorState, camera *Camera, tileset *Tileset) *Canvas {
 		showCollision: true,
 		mousePressed:  false,
 		validation:    nil,
+		hoveredTileX:  -1,
+		hoveredTileY:  -1,
 	}
+	// Set the state reference for tools that need it
+	c.tools.SetState(state)
+	return c
 }
 
 // Draw renders the tilemap canvas to the screen.
@@ -623,17 +630,41 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 	camY := c.camera.Y
 	zoom := c.camera.Zoom
 
+	// Get map bounds
+	mapWidth := c.state.MapData.Width()
+	mapHeight := c.state.MapData.Height()
+
 	// Calculate visible tile range
 	startTileX := int(camX) / tileW
 	startTileY := int(camY) / tileH
 	endTileX := startTileX + int(float64(canvasWidth)/float64(tileW)/zoom) + 2
 	endTileY := startTileY + int(float64(screenHeight)/float64(tileH)/zoom) + 2
 
+	// Clamp to map bounds
+	if startTileX < 0 {
+		startTileX = 0
+	}
+	if startTileY < 0 {
+		startTileY = 0
+	}
+	if endTileX > mapWidth {
+		endTileX = mapWidth
+	}
+	if endTileY > mapHeight {
+		endTileY = mapHeight
+	}
+
 	// Create grid line image
 	gridLine := ebiten.NewImage(1, 1)
 	gridLine.Fill(gridColor)
 
-	// Draw vertical lines
+	// Calculate the screen position of the map boundaries
+	mapRightWorld := float64(mapWidth * tileW)
+	mapBottomWorld := float64(mapHeight * tileH)
+	mapRightScreen := (mapRightWorld - camX) * zoom
+	mapBottomScreen := (mapBottomWorld - camY) * zoom
+
+	// Draw vertical lines (only within map bounds)
 	for tx := startTileX; tx <= endTileX; tx++ {
 		worldX := float64(tx * tileW)
 		screenX := (worldX - camX) * zoom
@@ -642,13 +673,26 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			continue
 		}
 
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(1, float64(screenHeight))
-		op.GeoM.Translate(screenX, 0)
-		screen.DrawImage(gridLine, op)
+		// Calculate line height (don't extend beyond map bottom)
+		lineTop := 0.0
+		lineBottom := float64(screenHeight)
+		if mapBottomScreen < lineBottom {
+			lineBottom = mapBottomScreen
+		}
+		if lineBottom <= 0 {
+			continue
+		}
+
+		lineHeight := lineBottom - lineTop
+		if lineHeight > 0 {
+			op := &ebiten.DrawImageOptions{}
+			op.GeoM.Scale(1, lineHeight)
+			op.GeoM.Translate(screenX, lineTop)
+			screen.DrawImage(gridLine, op)
+		}
 	}
 
-	// Draw horizontal lines
+	// Draw horizontal lines (only within map bounds)
 	for ty := startTileY; ty <= endTileY; ty++ {
 		worldY := float64(ty * tileH)
 		screenY := (worldY - camY) * zoom
@@ -657,16 +701,30 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			continue
 		}
 
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(float64(canvasWidth), 1)
-		op.GeoM.Translate(0, screenY)
-		screen.DrawImage(gridLine, op)
+		// Calculate line width (don't extend beyond map right edge)
+		lineLeft := 0.0
+		lineRight := float64(canvasWidth)
+		if mapRightScreen < lineRight {
+			lineRight = mapRightScreen
+		}
+		if lineRight <= 0 {
+			continue
+		}
+
+		lineWidth := lineRight - lineLeft
+		if lineWidth > 0 {
+			op := &ebiten.DrawImageOptions{}
+			op.GeoM.Scale(lineWidth, 1)
+			op.GeoM.Translate(lineLeft, screenY)
+			screen.DrawImage(gridLine, op)
+		}
 	}
 }
 
 // drawToolPreview renders a preview of the selected tile under the cursor.
 func (c *Canvas) drawToolPreview(screen *ebiten.Image, canvasWidth int) {
-	if c.state.SelectedTile < 0 || c.tileset == nil || !c.tileset.IsLoaded() {
+	// Only show preview for paint tool with a selected tile
+	if c.state.CurrentTool != ToolPaint || c.state.SelectedTile < 0 || c.tileset == nil || !c.tileset.IsLoaded() {
 		return
 	}
 
@@ -746,6 +804,8 @@ func (c *Canvas) handleToolInput() {
 		// Approximate canvas width check (account for both palettes)
 		canvasWidth := screenWidth - PaletteWidth - ObjectPaletteWidth
 		if mx >= canvasWidth {
+			c.hoveredTileX = -1
+			c.hoveredTileY = -1
 			return
 		}
 	}
@@ -758,6 +818,17 @@ func (c *Canvas) handleToolInput() {
 	tileH := c.state.MapData.TileHeight()
 	tileX := int(worldX) / tileW
 	tileY := int(worldY) / tileH
+
+	// Update hovered tile position (clamped to map bounds)
+	mapWidth := c.state.MapData.Width()
+	mapHeight := c.state.MapData.Height()
+	if tileX >= 0 && tileX < mapWidth && tileY >= 0 && tileY < mapHeight {
+		c.hoveredTileX = tileX
+		c.hoveredTileY = tileY
+	} else {
+		c.hoveredTileX = -1
+		c.hoveredTileY = -1
+	}
 
 	// Update hover handle for cursor display (only in select mode)
 	if c.state.CurrentTool == ToolSelect {
@@ -836,6 +907,12 @@ func (c *Canvas) SetValidation(result *ValidationResult) {
 // Validation returns the current validation result.
 func (c *Canvas) Validation() *ValidationResult {
 	return c.validation
+}
+
+// HoveredTile returns the currently hovered tile coordinates.
+// Returns -1, -1 if no valid tile is hovered.
+func (c *Canvas) HoveredTile() (int, int) {
+	return c.hoveredTileX, c.hoveredTileY
 }
 
 // Colors for canvas rendering

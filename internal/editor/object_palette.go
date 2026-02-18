@@ -46,6 +46,11 @@ func (p *ObjectPalette) SetSelectedType(typ world.ObjectType) {
 	p.selectedType = typ
 }
 
+// ClearSelection clears the current object type selection.
+func (p *ObjectPalette) ClearSelection() {
+	p.selectedType = ""
+}
+
 // Draw renders the object palette to the screen.
 // The palette is drawn in the right sidebar, below the tile palette.
 func (p *ObjectPalette) Draw(screen *ebiten.Image, startY int) {
