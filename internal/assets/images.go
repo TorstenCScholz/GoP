@@ -62,6 +62,26 @@ func LoadTileset() (*ebiten.Image, error) {
 	return LoadImage(fs, "tiles.png")
 }
 
+// LoadTilesetRaw loads the tileset as a raw image.Image for pixel access.
+// Use this when you need to read pixels before the game loop starts.
+func LoadTilesetRaw() (image.Image, error) {
+	fs, err := SubFS("tiles")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tiles directory: %w", err)
+	}
+	file, err := fs.Open("tiles.png")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tileset: %w", err)
+	}
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode tileset: %w", err)
+	}
+	return img, nil
+}
+
 // LoadLevelJSON loads the level JSON from assets/levels/level_01.json.
 func LoadLevelJSON() ([]byte, error) {
 	return LoadFile("levels/level_01.json")
