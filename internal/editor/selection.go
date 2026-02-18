@@ -23,6 +23,8 @@ const (
 	HandleBottom
 	HandleLeft
 	HandleRight
+	// Platform endpoint handle - for setting platform movement destination
+	HandlePlatformEndpoint
 )
 
 // DragMode represents the current drag operation mode.
@@ -519,6 +521,8 @@ func GetCursorForHandle(handle HandlePosition) string {
 		return "ns-resize"
 	case HandleLeft, HandleRight:
 		return "ew-resize"
+	case HandlePlatformEndpoint:
+		return "crosshair"
 	default:
 		return "default"
 	}

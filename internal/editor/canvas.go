@@ -77,6 +77,11 @@ func (c *Canvas) Draw(screen *ebiten.Image) {
 
 	// Draw tool preview
 	c.drawToolPreview(screen, canvasWidth)
+
+	// Draw link mode visual feedback
+	if c.state.IsInLinkMode() {
+		c.drawLinkModeFeedback(screen, canvasWidth)
+	}
 }
 
 // drawTileLayers renders all visible tile layers.
@@ -298,6 +303,10 @@ func (c *Canvas) drawObjects(screen *ebiten.Image, canvasWidth int) {
 			// Draw resize handles only for primary selection
 			if selection.SelectedIndex() == i {
 				c.drawSelectionHandles(screen, screenX, screenY, w, h, zoom)
+				// Draw endpoint handle for platforms
+				if obj.Type == world.ObjectTypePlatform {
+					c.drawEndpointHandle(screen, obj, camX, camY, zoom, i == c.state.DraggingObjectIdx && c.state.IsDraggingEndpoint)
+				}
 			}
 		}
 
@@ -618,6 +627,49 @@ func (c *Canvas) drawSelectionHandles(screen *ebiten.Image, screenX, screenY, w,
 	}
 }
 
+// drawEndpointHandle draws a draggable handle for the platform endpoint.
+func (c *Canvas) drawEndpointHandle(screen *ebiten.Image, obj world.ObjectData, camX, camY, zoom float64, isDragging bool) {
+	// Get endpoint position
+	endX := obj.GetPropFloat("endX", 0)
+	endY := obj.GetPropFloat("endY", 0)
+
+	// Calculate endpoint screen position
+	endWorldX := obj.X + endX
+	endWorldY := obj.Y + endY
+	endScreenX := (endWorldX - camX) * zoom
+	endScreenY := (endWorldY - camY) * zoom
+
+	// Handle size
+	handleSize := 12.0 // Larger than resize handles for easier clicking
+	hs := handleSize / 2.0
+
+	// Choose color based on drag state
+	handleColor := endpointHandleColor
+	if isDragging {
+		handleColor = endpointHandleDragColor
+	}
+	handleBorder := color.RGBA{0, 0, 0, 255}
+
+	// Draw handle background
+	handleImg := ebiten.NewImage(int(handleSize), int(handleSize))
+	handleImg.Fill(handleColor)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(endScreenX-hs, endScreenY-hs)
+	screen.DrawImage(handleImg, op)
+
+	// Draw handle border
+	ebitenutil.DrawRect(screen, endScreenX-hs, endScreenY-hs, handleSize, 1, handleBorder)
+	ebitenutil.DrawRect(screen, endScreenX-hs, endScreenY+hs-1, handleSize, 1, handleBorder)
+	ebitenutil.DrawRect(screen, endScreenX-hs, endScreenY-hs, 1, handleSize, handleBorder)
+	ebitenutil.DrawRect(screen, endScreenX+hs-1, endScreenY-hs, 1, handleSize, handleBorder)
+
+	// Draw coordinates label when dragging
+	if isDragging {
+		coordText := fmt.Sprintf("(%.0f, %.0f)", endX, endY)
+		ebitenutil.DebugPrintAt(screen, coordText, int(endScreenX+hs+4), int(endScreenY-6))
+	}
+}
+
 // drawGrid renders the tile grid overlay.
 func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 	if c.state.MapData == nil {
@@ -739,8 +791,17 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 
 // drawToolPreview renders a preview of the selected tile under the cursor.
 func (c *Canvas) drawToolPreview(screen *ebiten.Image, canvasWidth int) {
-	// Only show preview for paint tool with a selected tile
-	if c.state.CurrentTool != ToolPaint || c.state.SelectedTile < 0 || c.tileset == nil || !c.tileset.IsLoaded() {
+	// Only show preview for paint tool
+	if c.state.CurrentTool != ToolPaint {
+		return
+	}
+
+	// For Tiles layer, require a selected tile
+	// For Collision layer, always show preview
+	if c.state.CurrentLayer != "Collision" && c.state.SelectedTile < 0 {
+		return
+	}
+	if c.tileset == nil || !c.tileset.IsLoaded() {
 		return
 	}
 
@@ -766,25 +827,88 @@ func (c *Canvas) drawToolPreview(screen *ebiten.Image, canvasWidth int) {
 		return
 	}
 
-	// Get the selected tile image
-	tile := c.tileset.Tile(c.state.SelectedTile)
-	if tile == nil {
-		return
-	}
-
 	// Calculate screen position for preview
 	previewWorldX := float64(tileX * tileW)
 	previewWorldY := float64(tileY * tileH)
 	screenX := (previewWorldX - c.camera.X) * c.camera.Zoom
 	screenY := (previewWorldY - c.camera.Y) * c.camera.Zoom
 
-	// Draw preview tile with transparency
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(c.camera.Zoom, c.camera.Zoom)
-	op.GeoM.Translate(screenX, screenY)
-	op.ColorM.Scale(1, 1, 1, 0.5) // Semi-transparent
-	op.Filter = ebiten.FilterNearest
-	screen.DrawImage(tile, op)
+	// Draw preview based on layer type
+	if c.state.CurrentLayer == "Collision" {
+		// Draw collision preview
+		previewColor := collisionSolidColor
+		if !c.state.SelectedCollision {
+			previewColor = collisionEmptyColor
+		}
+		previewTile := ebiten.NewImage(tileW, tileH)
+		previewTile.Fill(previewColor)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Scale(c.camera.Zoom, c.camera.Zoom)
+		op.GeoM.Translate(screenX, screenY)
+		op.ColorM.Scale(1, 1, 1, 0.5) // Semi-transparent
+		screen.DrawImage(previewTile, op)
+	} else {
+		// Draw tile preview
+		tile := c.tileset.Tile(c.state.SelectedTile)
+		if tile == nil {
+			return
+		}
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Scale(c.camera.Zoom, c.camera.Zoom)
+		op.GeoM.Translate(screenX, screenY)
+		op.ColorM.Scale(1, 1, 1, 0.5) // Semi-transparent
+		op.Filter = ebiten.FilterNearest
+		screen.DrawImage(tile, op)
+	}
+}
+
+// drawLinkModeFeedback draws visual feedback during link mode.
+func (c *Canvas) drawLinkModeFeedback(screen *ebiten.Image, canvasWidth int) {
+	switchIndex := c.state.GetLinkSource()
+	if switchIndex < 0 || switchIndex >= len(c.state.Objects) {
+		return
+	}
+
+	switchObj := c.state.Objects[switchIndex]
+	if switchObj.Type != world.ObjectTypeSwitch {
+		return
+	}
+
+	camX := c.camera.X
+	camY := c.camera.Y
+	zoom := c.camera.Zoom
+
+	// Get cursor position
+	mx, my := ebiten.CursorPosition()
+
+	// Calculate switch center in screen coordinates
+	switchCenterX := (switchObj.X + switchObj.W/2 - camX) * zoom
+	switchCenterY := (switchObj.Y + switchObj.H/2 - camY) * zoom
+
+	// Draw line from switch to cursor
+	linkLineColor := color.RGBA{255, 200, 0, 200} // Yellow/orange color
+	ebitenutil.DrawLine(screen, switchCenterX, switchCenterY, float64(mx), float64(my), linkLineColor)
+
+	// Highlight all doors
+	for _, obj := range c.state.Objects {
+		if obj.Type != world.ObjectTypeDoor {
+			continue
+		}
+
+		// Convert world coordinates to screen coordinates
+		screenX := (obj.X - camX) * zoom
+		screenY := (obj.Y - camY) * zoom
+		w := obj.W * zoom
+		h := obj.H * zoom
+
+		// Draw highlight border around door
+		highlightColor := color.RGBA{0, 255, 100, 200} // Green highlight
+		borderWidth := 3.0
+		ebitenutil.DrawRect(screen, screenX-borderWidth, screenY-borderWidth, w+2*borderWidth, borderWidth, highlightColor)
+		ebitenutil.DrawRect(screen, screenX-borderWidth, screenY+h, w+2*borderWidth, borderWidth, highlightColor)
+		ebitenutil.DrawRect(screen, screenX-borderWidth, screenY-borderWidth, borderWidth, h+2*borderWidth, highlightColor)
+		ebitenutil.DrawRect(screen, screenX+w, screenY-borderWidth, borderWidth, h+2*borderWidth, highlightColor)
+	}
 }
 
 // Update handles input for the canvas.
@@ -808,6 +932,11 @@ func (c *Canvas) Update() error {
 // handleToolInput processes mouse input for the current tool.
 func (c *Canvas) handleToolInput() {
 	if c.state == nil || !c.state.HasLevel() {
+		return
+	}
+
+	// Skip tool handling if Space is pressed (drag-to-scroll mode)
+	if c.state.SpacePressed {
 		return
 	}
 
@@ -846,11 +975,44 @@ func (c *Canvas) handleToolInput() {
 		c.hoveredTileY = -1
 	}
 
+	// Handle endpoint dragging
+	if c.state.IsDraggingEndpoint {
+		c.handleEndpointDrag(worldX, worldY)
+		return
+	}
+
+	// Handle link mode separately
+	if c.state.IsInLinkMode() {
+		c.handleLinkModeInput(worldX, worldY)
+		return
+	}
+
 	// Update hover handle for cursor display (only in select mode)
 	if c.state.CurrentTool == ToolSelect {
-		selectTool := c.tools.SelectTool()
-		if selectTool != nil {
-			c.hoverHandle = selectTool.GetHoverHandle(c.state, worldX, worldY)
+		// Check for endpoint handle hover first
+		selection := c.state.GetSelectionManager()
+		if selection != nil && selection.HasSelection() {
+			selectedIdx := selection.SelectedIndex()
+			if selectedIdx >= 0 && selectedIdx < len(c.state.Objects) {
+				obj := c.state.Objects[selectedIdx]
+				if obj.Type == world.ObjectTypePlatform {
+					if c.isPointOnEndpointHandle(worldX, worldY, obj) {
+						c.hoverHandle = HandlePlatformEndpoint
+					} else {
+						selectTool := c.tools.SelectTool()
+						if selectTool != nil {
+							c.hoverHandle = selectTool.GetHoverHandle(c.state, worldX, worldY)
+						}
+					}
+				} else {
+					selectTool := c.tools.SelectTool()
+					if selectTool != nil {
+						c.hoverHandle = selectTool.GetHoverHandle(c.state, worldX, worldY)
+					}
+				}
+			}
+		} else {
+			c.hoverHandle = HandleNone
 		}
 	} else {
 		c.hoverHandle = HandleNone
@@ -858,8 +1020,13 @@ func (c *Canvas) handleToolInput() {
 
 	// Handle mouse button events
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		c.mousePressed = true
-		c.tools.HandleMouseDown(c.state, tileX, tileY, worldX, worldY)
+		// Check if clicking on endpoint handle
+		if c.hoverHandle == HandlePlatformEndpoint {
+			c.startEndpointDrag(worldX, worldY)
+		} else {
+			c.mousePressed = true
+			c.tools.HandleMouseDown(c.state, tileX, tileY, worldX, worldY)
+		}
 	}
 
 	if c.mousePressed && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
@@ -870,6 +1037,204 @@ func (c *Canvas) handleToolInput() {
 		c.mousePressed = false
 		c.tools.HandleMouseUp(c.state, tileX, tileY, worldX, worldY)
 	}
+}
+
+// isPointOnEndpointHandle checks if a world point is on the platform endpoint handle.
+func (c *Canvas) isPointOnEndpointHandle(worldX, worldY float64, obj world.ObjectData) bool {
+	// Get endpoint position
+	endX := obj.GetPropFloat("endX", 0)
+	endY := obj.GetPropFloat("endY", 0)
+
+	// Calculate endpoint world position
+	endWorldX := obj.X + endX
+	endWorldY := obj.Y + endY
+
+	// Handle size in world coordinates (12 screen pixels / zoom)
+	handleSize := 12.0 / c.camera.Zoom
+	hs := handleSize / 2.0
+
+	// Check if point is within handle bounds
+	return worldX >= endWorldX-hs && worldX < endWorldX+hs &&
+		worldY >= endWorldY-hs && worldY < endWorldY+hs
+}
+
+// startEndpointDrag begins dragging the platform endpoint.
+func (c *Canvas) startEndpointDrag(worldX, worldY float64) {
+	selection := c.state.GetSelectionManager()
+	if selection == nil || !selection.HasSelection() {
+		return
+	}
+
+	selectedIdx := selection.SelectedIndex()
+	if selectedIdx < 0 || selectedIdx >= len(c.state.Objects) {
+		return
+	}
+
+	obj := c.state.Objects[selectedIdx]
+	if obj.Type != world.ObjectTypePlatform {
+		return
+	}
+
+	// Get current endpoint values
+	endX := obj.GetPropFloat("endX", 0)
+	endY := obj.GetPropFloat("endY", 0)
+
+	// Store drag state
+	c.state.IsDraggingEndpoint = true
+	c.state.DraggingObjectIdx = selectedIdx
+	c.state.DragStartEndpointX = endX
+	c.state.DragStartEndpointY = endY
+	c.state.DragStartWorldX = worldX
+	c.state.DragStartWorldY = worldY
+}
+
+// handleEndpointDrag updates the endpoint position during drag.
+func (c *Canvas) handleEndpointDrag(worldX, worldY float64) {
+	if !c.state.IsDraggingEndpoint {
+		return
+	}
+
+	idx := c.state.DraggingObjectIdx
+	if idx < 0 || idx >= len(c.state.Objects) {
+		return
+	}
+
+	obj := &c.state.Objects[idx]
+	if obj.Type != world.ObjectTypePlatform {
+		return
+	}
+
+	// Calculate new endpoint offset
+	dx := worldX - c.state.DragStartWorldX
+	dy := worldY - c.state.DragStartWorldY
+
+	newEndX := c.state.DragStartEndpointX + dx
+	newEndY := c.state.DragStartEndpointY + dy
+
+	// Snap to grid if enabled (use 16 pixel grid by default)
+	gridSize := 16
+	if c.state.MapData != nil {
+		gridSize = c.state.MapData.TileWidth()
+	}
+	newEndX = float64(int(newEndX/float64(gridSize))) * float64(gridSize)
+	newEndY = float64(int(newEndY/float64(gridSize))) * float64(gridSize)
+
+	// Update the properties
+	if obj.Props == nil {
+		obj.Props = make(map[string]any)
+	}
+	obj.Props["endX"] = newEndX
+	obj.Props["endY"] = newEndY
+
+	// Check for mouse release to end drag
+	if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		c.endEndpointDrag()
+	}
+}
+
+// endEndpointDrag finalizes the endpoint drag operation.
+func (c *Canvas) endEndpointDrag() {
+	if !c.state.IsDraggingEndpoint {
+		return
+	}
+
+	idx := c.state.DraggingObjectIdx
+	if idx >= 0 && idx < len(c.state.Objects) {
+		obj := c.state.Objects[idx]
+
+		// Get final values
+		newEndX := obj.GetPropFloat("endX", 0)
+		newEndY := obj.GetPropFloat("endY", 0)
+
+		// Only create action if values actually changed
+		if newEndX != c.state.DragStartEndpointX || newEndY != c.state.DragStartEndpointY {
+			action := NewSetPlatformEndpointAction(
+				idx,
+				c.state.DragStartEndpointX,
+				c.state.DragStartEndpointY,
+				newEndX,
+				newEndY,
+			)
+			c.state.History.Do(action, c.state)
+		}
+	}
+
+	// Clear drag state
+	c.state.IsDraggingEndpoint = false
+	c.state.DraggingObjectIdx = -1
+}
+
+// handleLinkModeInput handles input when in link mode.
+func (c *Canvas) handleLinkModeInput(worldX, worldY float64) {
+	// Check for mouse click on a door
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		// Find the door object under the cursor
+		for i, obj := range c.state.Objects {
+			if obj.Type != world.ObjectTypeDoor {
+				continue
+			}
+
+			// Check if click is within this door's bounds
+			if worldX >= obj.X && worldX < obj.X+obj.W &&
+				worldY >= obj.Y && worldY < obj.Y+obj.H {
+				// Found a door - link it to the switch
+				c.linkSwitchToDoor(i)
+				return
+			}
+		}
+		// Click didn't hit a door - could show feedback or just ignore
+	}
+}
+
+// linkSwitchToDoor creates a link between the selected switch and the clicked door.
+func (c *Canvas) linkSwitchToDoor(doorIndex int) {
+	switchIndex := c.state.GetLinkSource()
+	if switchIndex < 0 || switchIndex >= len(c.state.Objects) {
+		c.state.EndLinkMode()
+		return
+	}
+
+	if doorIndex < 0 || doorIndex >= len(c.state.Objects) {
+		c.state.EndLinkMode()
+		return
+	}
+
+	switchObj := c.state.Objects[switchIndex]
+	doorObj := c.state.Objects[doorIndex]
+
+	// Verify the source is a switch
+	if switchObj.Type != world.ObjectTypeSwitch {
+		c.state.EndLinkMode()
+		return
+	}
+
+	// Verify the target is a door
+	if doorObj.Type != world.ObjectTypeDoor {
+		c.state.EndLinkMode()
+		return
+	}
+
+	// Get the door's ID
+	doorID := doorObj.GetPropString("id", "")
+	if doorID == "" {
+		// Door has no ID - show error message
+		c.state.ShowStatusMessage("Door has no ID - set an ID first", true)
+		c.state.EndLinkMode()
+		return
+	}
+
+	// Get the old door_id from the switch
+	oldDoorID := switchObj.GetPropString("door_id", "")
+
+	// Create and execute the link action
+	action := NewLinkSwitchToDoorAction(switchIndex, oldDoorID, doorID)
+	c.state.History.Do(action, c.state)
+
+	// Show success message
+	c.state.ShowStatusMessage(fmt.Sprintf("Linked switch to door '%s'", doorID), false)
+
+	// Exit link mode
+	c.state.EndLinkMode()
 }
 
 // ScreenToTile converts screen coordinates to tile coordinates.
@@ -933,12 +1298,14 @@ func (c *Canvas) HoveredTile() (int, int) {
 
 // Colors for canvas rendering
 var (
-	gridColor              = color.RGBA{100, 100, 100, 100}
-	collisionOverlayColor  = color.RGBA{255, 0, 0, 80}
-	objectDefaultColor     = color.RGBA{128, 128, 128, 255}
-	validationErrorColor   = color.RGBA{255, 0, 0, 255}    // Red for errors
-	validationWarningColor = color.RGBA{255, 165, 0, 255}  // Orange for warnings
-	platformPathColor      = color.RGBA{128, 64, 192, 200} // Purple for platform paths
+	gridColor               = color.RGBA{100, 100, 100, 100}
+	collisionOverlayColor   = color.RGBA{255, 0, 0, 80}
+	objectDefaultColor      = color.RGBA{128, 128, 128, 255}
+	validationErrorColor    = color.RGBA{255, 0, 0, 255}    // Red for errors
+	validationWarningColor  = color.RGBA{255, 165, 0, 255}  // Orange for warnings
+	platformPathColor       = color.RGBA{128, 64, 192, 200} // Purple for platform paths
+	endpointHandleColor     = color.RGBA{255, 255, 0, 255}  // Yellow for endpoint handles
+	endpointHandleDragColor = color.RGBA{0, 255, 255, 255}  // Cyan when dragging
 )
 
 // darkerColor returns a darker version of the given color.

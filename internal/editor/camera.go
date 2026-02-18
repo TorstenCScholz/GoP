@@ -21,12 +21,19 @@ type Camera struct {
 	Y    float64
 	Zoom float64 // Zoom level (1.0 = 100%)
 
-	// Interaction state
+	// Interaction state (middle mouse button panning)
 	isPanning  bool
 	panStartX  int
 	panStartY  int
 	panCameraX float64
 	panCameraY float64
+
+	// Space+Left-click drag panning state
+	IsDragging    bool
+	DragStartX    float64
+	DragStartY    float64
+	DragStartCamX float64
+	DragStartCamY float64
 }
 
 // NewCamera creates a new camera with default values.
@@ -144,4 +151,30 @@ func (c *Camera) Reset() {
 	c.Y = 0
 	c.Zoom = 1.0
 	c.isPanning = false
+	c.IsDragging = false
+}
+
+// StartDrag begins a Space+Left-click drag pan operation.
+func (c *Camera) StartDrag(screenX, screenY float64) {
+	c.IsDragging = true
+	c.DragStartX = screenX
+	c.DragStartY = screenY
+	c.DragStartCamX = c.X
+	c.DragStartCamY = c.Y
+}
+
+// UpdateDrag updates the camera position during a drag pan operation.
+func (c *Camera) UpdateDrag(screenX, screenY float64) {
+	if !c.IsDragging {
+		return
+	}
+	dx := (screenX - c.DragStartX) / c.Zoom
+	dy := (screenY - c.DragStartY) / c.Zoom
+	c.X = c.DragStartCamX - dx
+	c.Y = c.DragStartCamY - dy
+}
+
+// EndDrag ends a drag pan operation.
+func (c *Camera) EndDrag() {
+	c.IsDragging = false
 }

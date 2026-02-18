@@ -410,3 +410,95 @@ func (a *DeleteMultipleObjectsAction) Undo(state *EditorState) {
 func (a *DeleteMultipleObjectsAction) Description() string {
 	return fmt.Sprintf("Delete %d objects", len(a.Objects))
 }
+
+// LinkSwitchToDoorAction represents linking a switch to a door.
+type LinkSwitchToDoorAction struct {
+	SwitchIndex int
+	OldDoorID   string
+	NewDoorID   string
+}
+
+// NewLinkSwitchToDoorAction creates a new link switch to door action.
+func NewLinkSwitchToDoorAction(switchIndex int, oldDoorID, newDoorID string) *LinkSwitchToDoorAction {
+	return &LinkSwitchToDoorAction{
+		SwitchIndex: switchIndex,
+		OldDoorID:   oldDoorID,
+		NewDoorID:   newDoorID,
+	}
+}
+
+// Do sets the switch's door_id to the new door ID.
+func (a *LinkSwitchToDoorAction) Do(state *EditorState) {
+	if a.SwitchIndex >= 0 && a.SwitchIndex < len(state.Objects) {
+		if state.Objects[a.SwitchIndex].Props == nil {
+			state.Objects[a.SwitchIndex].Props = make(map[string]any)
+		}
+		state.Objects[a.SwitchIndex].Props["door_id"] = a.NewDoorID
+	}
+}
+
+// Undo restores the switch's door_id to the old value.
+func (a *LinkSwitchToDoorAction) Undo(state *EditorState) {
+	if a.SwitchIndex >= 0 && a.SwitchIndex < len(state.Objects) {
+		if state.Objects[a.SwitchIndex].Props == nil {
+			state.Objects[a.SwitchIndex].Props = make(map[string]any)
+		}
+		if a.OldDoorID == "" {
+			delete(state.Objects[a.SwitchIndex].Props, "door_id")
+		} else {
+			state.Objects[a.SwitchIndex].Props["door_id"] = a.OldDoorID
+		}
+	}
+}
+
+// Description returns a human-readable description.
+func (a *LinkSwitchToDoorAction) Description() string {
+	return fmt.Sprintf("Link switch to door '%s'", a.NewDoorID)
+}
+
+// SetPlatformEndpointAction represents changing the endpoint of a moving platform.
+type SetPlatformEndpointAction struct {
+	ObjectIndex int
+	OldEndX     float64
+	OldEndY     float64
+	NewEndX     float64
+	NewEndY     float64
+}
+
+// NewSetPlatformEndpointAction creates a new set platform endpoint action.
+func NewSetPlatformEndpointAction(objectIndex int, oldEndX, oldEndY, newEndX, newEndY float64) *SetPlatformEndpointAction {
+	return &SetPlatformEndpointAction{
+		ObjectIndex: objectIndex,
+		OldEndX:     oldEndX,
+		OldEndY:     oldEndY,
+		NewEndX:     newEndX,
+		NewEndY:     newEndY,
+	}
+}
+
+// Do sets the platform endpoint to the new values.
+func (a *SetPlatformEndpointAction) Do(state *EditorState) {
+	if a.ObjectIndex >= 0 && a.ObjectIndex < len(state.Objects) {
+		if state.Objects[a.ObjectIndex].Props == nil {
+			state.Objects[a.ObjectIndex].Props = make(map[string]any)
+		}
+		state.Objects[a.ObjectIndex].Props["endX"] = a.NewEndX
+		state.Objects[a.ObjectIndex].Props["endY"] = a.NewEndY
+	}
+}
+
+// Undo restores the platform endpoint to the old values.
+func (a *SetPlatformEndpointAction) Undo(state *EditorState) {
+	if a.ObjectIndex >= 0 && a.ObjectIndex < len(state.Objects) {
+		if state.Objects[a.ObjectIndex].Props == nil {
+			state.Objects[a.ObjectIndex].Props = make(map[string]any)
+		}
+		state.Objects[a.ObjectIndex].Props["endX"] = a.OldEndX
+		state.Objects[a.ObjectIndex].Props["endY"] = a.OldEndY
+	}
+}
+
+// Description returns a human-readable description.
+func (a *SetPlatformEndpointAction) Description() string {
+	return fmt.Sprintf("Set platform endpoint to (%.0f, %.0f)", a.NewEndX, a.NewEndY)
+}

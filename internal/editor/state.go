@@ -37,11 +37,13 @@ type EditorState struct {
 	Tileset  *world.Tileset     // Loaded tileset
 
 	// UI state
-	CurrentTool    Tool            // Currently selected tool
-	CurrentLayer   string          // Name of the active layer ("Tiles" or "Collision")
-	LayerVisible   map[string]bool // Visibility state for each layer
-	SelectedTile   int             // Tile ID for painting (-1 if none)
-	SelectedObject int             // Object index for selection (-1 if none)
+	CurrentTool       Tool            // Currently selected tool
+	CurrentLayer      string          // Name of the active layer ("Tiles" or "Collision")
+	LayerVisible      map[string]bool // Visibility state for each layer
+	SelectedTile      int             // Tile ID for painting (-1 if none)
+	SelectedCollision bool            // Collision value for painting (true = solid, false = empty)
+	SelectedObject    int             // Object index for selection (-1 if none)
+	SpacePressed      bool            // True when Space key is held (for drag-to-scroll)
 
 	// View state
 	CameraX float64 // Camera X position in world coordinates
@@ -59,24 +61,37 @@ type EditorState struct {
 
 	// Status message for user feedback
 	StatusMessage *StatusMessage
+
+	// Link mode - when true, next click on a door links it to the selected switch
+	LinkMode     bool
+	LinkSourceID int // Index of the switch object being linked
+
+	// Endpoint dragging for platforms
+	IsDraggingEndpoint bool    // True when dragging a platform endpoint handle
+	DraggingObjectIdx  int     // Index of the platform being edited
+	DragStartEndpointX float64 // Original endX value when drag started
+	DragStartEndpointY float64 // Original endY value when drag started
+	DragStartWorldX    float64 // World X position where drag started
+	DragStartWorldY    float64 // World Y position where drag started
 }
 
 // NewEditorState creates a new editor state with default values.
 func NewEditorState() *EditorState {
 	return &EditorState{
-		FilePath:       "",
-		MapData:        nil,
-		Objects:        nil,
-		Tileset:        nil,
-		CurrentTool:    ToolSelect,
-		CurrentLayer:   "Tiles",
-		LayerVisible:   map[string]bool{"Tiles": true, "Collision": true},
-		SelectedTile:   -1,
-		SelectedObject: -1,
-		CameraX:        0,
-		CameraY:        0,
-		Zoom:           1.0,
-		History:        NewHistory(),
+		FilePath:          "",
+		MapData:           nil,
+		Objects:           nil,
+		Tileset:           nil,
+		CurrentTool:       ToolSelect,
+		CurrentLayer:      "Tiles",
+		LayerVisible:      map[string]bool{"Tiles": true, "Collision": true},
+		SelectedTile:      -1,
+		SelectedCollision: true, // Default to solid
+		SelectedObject:    -1,
+		CameraX:           0,
+		CameraY:           0,
+		Zoom:              1.0,
+		History:           NewHistory(),
 	}
 }
 
@@ -137,6 +152,11 @@ func (s *EditorState) CycleLayer() {
 // SelectTile sets the selected tile for painting.
 func (s *EditorState) SelectTile(tileID int) {
 	s.SelectedTile = tileID
+}
+
+// SelectCollision sets the selected collision value for painting.
+func (s *EditorState) SelectCollision(solid bool) {
+	s.SelectedCollision = solid
 }
 
 // SelectObject sets the selected object index.
@@ -233,6 +253,28 @@ func (s *EditorState) UpdateStatusMessage() {
 // ClearStatusMessage clears the current status message.
 func (s *EditorState) ClearStatusMessage() {
 	s.StatusMessage = nil
+}
+
+// StartLinkMode begins link mode for connecting a switch to a door.
+func (s *EditorState) StartLinkMode(switchIndex int) {
+	s.LinkMode = true
+	s.LinkSourceID = switchIndex
+}
+
+// EndLinkMode exits link mode.
+func (s *EditorState) EndLinkMode() {
+	s.LinkMode = false
+	s.LinkSourceID = -1
+}
+
+// IsInLinkMode returns true if the editor is in link mode.
+func (s *EditorState) IsInLinkMode() bool {
+	return s.LinkMode
+}
+
+// GetLinkSource returns the index of the switch being linked.
+func (s *EditorState) GetLinkSource() int {
+	return s.LinkSourceID
 }
 
 // selectionManager is stored separately for clipboard access

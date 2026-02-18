@@ -12,6 +12,12 @@ import (
 	"github.com/torsten/GoP/internal/world"
 )
 
+// Link button dimensions
+const (
+	LinkButtonWidth  = 60
+	LinkButtonHeight = PropertyRowHeight - 4
+)
+
 const (
 	// PropertiesPanelHeight is the height of the properties panel in pixels.
 	PropertiesPanelHeight = 250
@@ -35,14 +41,16 @@ const (
 
 // PropertiesPanel handles rendering and interaction for the property editing panel.
 type PropertiesPanel struct {
-	state         *EditorState
-	editorState   PropertyEditorState
-	editingIndex  int               // Index of property being edited
-	editingBuffer string            // Text buffer for editing
-	editingProp   string            // Name of property being edited
-	scrollOffset  int               // Scroll offset for long property lists
-	hoveredRow    int               // Index of hovered property row (-1 if none)
-	validation    *ValidationResult // Current validation result
+	state             *EditorState
+	editorState       PropertyEditorState
+	editingIndex      int                   // Index of property being edited
+	editingBuffer     string                // Text buffer for editing
+	editingProp       string                // Name of property being edited
+	scrollOffset      int                   // Scroll offset for long property lists
+	hoveredRow        int                   // Index of hovered property row (-1 if none)
+	validation        *ValidationResult     // Current validation result
+	linkButtonHovered bool                  // True if the "Link to Door" button is hovered
+	OnStartLinkMode   func(switchIndex int) // Callback when link mode is requested
 }
 
 // NewPropertiesPanel creates a new properties panel.
@@ -166,6 +174,16 @@ func (p *PropertiesPanel) drawCustomProperty(screen *ebiten.Image, panelX, y int
 	// Get current value
 	value := p.getPropertyValue(obj, propSchema)
 
+	// Check if this is the door_id property of a switch - add link button
+	isDoorIDProp := propSchema.Name == "door_id" && obj.Type == world.ObjectTypeSwitch
+
+	// Adjust value width if we need to add a button
+	buttonWidth := 0
+	if isDoorIDProp {
+		buttonWidth = 60 // Width for "Link" button
+		valueWidth -= buttonWidth + 5
+	}
+
 	// Check if this row is being edited
 	if p.editorState == PropertyEditorActive && p.editingProp == propSchema.Name {
 		// Draw input field background
@@ -209,6 +227,35 @@ func (p *PropertiesPanel) drawCustomProperty(screen *ebiten.Image, panelX, y int
 			}
 			ebitenutil.DebugPrintAt(screen, checkText, valueX, y)
 		}
+	}
+
+	// Draw "Link" button for door_id property on switches
+	if isDoorIDProp {
+		buttonX := valueX + valueWidth + 5
+		buttonHeight := PropertyRowHeight - 4
+
+		// Determine button color based on hover state
+		buttonColor := linkButtonColor
+		if p.linkButtonHovered {
+			buttonColor = linkButtonHoverColor
+		}
+
+		// Draw button background
+		buttonImg := ebiten.NewImage(buttonWidth, buttonHeight)
+		buttonImg.Fill(buttonColor)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(buttonX), float64(y))
+		screen.DrawImage(buttonImg, op)
+
+		// Draw button border
+		borderColor := color.RGBA{100, 100, 120, 255}
+		ebitenutil.DrawRect(screen, float64(buttonX), float64(y), float64(buttonWidth), 1, borderColor)
+		ebitenutil.DrawRect(screen, float64(buttonX), float64(y+buttonHeight-1), float64(buttonWidth), 1, borderColor)
+		ebitenutil.DrawRect(screen, float64(buttonX), float64(y), 1, float64(buttonHeight), borderColor)
+		ebitenutil.DrawRect(screen, float64(buttonX+buttonWidth-1), float64(y), 1, float64(buttonHeight), borderColor)
+
+		// Draw button text
+		ebitenutil.DebugPrintAt(screen, "Link", buttonX+8, y+2)
 	}
 
 	return y + PropertyRowHeight
@@ -487,7 +534,26 @@ func (p *PropertiesPanel) HandleClick(screenX, screenY, screenWidth, startY int)
 		if screenY >= rowTop && screenY < rowBottom {
 			// Click is on this property
 			valueX := panelX + PropertyPadding + PropertyLabelWidth
-			if screenX >= valueX {
+			valueWidth := ObjectPaletteWidth - 2*PropertyPadding - PropertyLabelWidth
+
+			// Check if this is the door_id property with a link button
+			isDoorIDProp := propSchema.Name == "door_id" && obj.Type == world.ObjectTypeSwitch
+			if isDoorIDProp {
+				buttonWidth := 60
+				valueWidth -= buttonWidth + 5
+				buttonX := valueX + valueWidth + 5
+
+				// Check if click is on the link button
+				if screenX >= buttonX && screenX < buttonX+buttonWidth {
+					// Link button clicked - trigger callback
+					if p.OnStartLinkMode != nil {
+						p.OnStartLinkMode(p.state.SelectedObject)
+					}
+					return true
+				}
+			}
+
+			if screenX >= valueX && screenX < valueX+valueWidth {
 				// Click is on the value area - start editing
 				p.startEdit(obj, propSchema, i)
 			}
@@ -501,6 +567,7 @@ func (p *PropertiesPanel) HandleClick(screenX, screenY, screenWidth, startY int)
 // HandleMouseMove processes mouse movement for hover effects.
 func (p *PropertiesPanel) HandleMouseMove(screenX, screenY, screenWidth, startY int) {
 	p.hoveredRow = -1
+	p.linkButtonHovered = false
 
 	// Check if mouse is in properties panel area
 	panelX := screenWidth - ObjectPaletteWidth
@@ -537,12 +604,28 @@ func (p *PropertiesPanel) HandleMouseMove(screenX, screenY, screenWidth, startY 
 	propY += 15
 
 	// Check each custom property
-	for i := range schema.Properties {
+	for i, propSchema := range schema.Properties {
 		rowTop := propY + i*PropertyRowHeight
 		rowBottom := rowTop + PropertyRowHeight
 
 		if screenY >= rowTop && screenY < rowBottom {
 			valueX := panelX + PropertyPadding + PropertyLabelWidth
+			valueWidth := ObjectPaletteWidth - 2*PropertyPadding - PropertyLabelWidth
+
+			// Check if this is the door_id property with a link button
+			isDoorIDProp := propSchema.Name == "door_id" && obj.Type == world.ObjectTypeSwitch
+			if isDoorIDProp {
+				buttonWidth := 60
+				valueWidth -= buttonWidth + 5
+				buttonX := valueX + valueWidth + 5
+
+				// Check if hovering over the link button
+				if screenX >= buttonX && screenX < buttonX+buttonWidth {
+					p.linkButtonHovered = true
+					return
+				}
+			}
+
 			if screenX >= valueX {
 				p.hoveredRow = i
 			}
@@ -585,6 +668,8 @@ var (
 	propertiesSeparatorColor = color.RGBA{80, 80, 90, 255}
 	propertyInputBgColor     = color.RGBA{30, 30, 40, 255}
 	propertyHoverColor       = color.RGBA{70, 70, 80, 255}
+	linkButtonColor          = color.RGBA{60, 100, 140, 255}
+	linkButtonHoverColor     = color.RGBA{80, 130, 180, 255}
 )
 
 // Helper function to check if a string is empty or whitespace only

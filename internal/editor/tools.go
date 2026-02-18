@@ -65,7 +65,12 @@ func (t *PaintTool) OnMouseUp(state *EditorState, tileX, tileY int, worldX, worl
 
 // recordPaintTile records a single tile paint operation.
 func (t *PaintTool) recordPaintTile(state *EditorState, tileX, tileY int) {
-	if state.MapData == nil || state.SelectedTile < 0 {
+	if state.MapData == nil {
+		return
+	}
+
+	// For Tiles layer, require a selected tile
+	if state.CurrentLayer != "Collision" && state.SelectedTile < 0 {
 		return
 	}
 
@@ -79,11 +84,18 @@ func (t *PaintTool) recordPaintTile(state *EditorState, tileX, tileY int) {
 		return
 	}
 
-	// For Tiles layer, use Tiled's 1-based tile IDs
-	// For Collision layer, use 1 for solid tiles
-	tileID := state.SelectedTile + 1 // Convert 0-based to 1-based
+	// Determine tile ID based on layer type
+	var tileID int
 	if state.CurrentLayer == "Collision" {
-		tileID = 1 // Collision layer uses 1 for solid
+		// Collision layer: use 1 for solid, 0 for empty
+		if state.SelectedCollision {
+			tileID = 1
+		} else {
+			tileID = 0
+		}
+	} else {
+		// Tiles layer: use Tiled's 1-based tile IDs
+		tileID = state.SelectedTile + 1 // Convert 0-based to 1-based
 	}
 
 	// Record the old value before changing
@@ -255,14 +267,27 @@ func NewFillTool() *FillTool {
 
 // OnMouseDown performs a flood fill starting at the clicked position.
 func (t *FillTool) OnMouseDown(state *EditorState, tileX, tileY int, worldX, worldY float64) {
-	if state.MapData == nil || state.SelectedTile < 0 {
+	if state.MapData == nil {
+		return
+	}
+
+	// For Tiles layer, require a selected tile
+	if state.CurrentLayer != "Collision" && state.SelectedTile < 0 {
 		return
 	}
 
 	// Determine the new tile ID
-	newID := state.SelectedTile + 1 // Convert 0-based to 1-based
+	var newID int
 	if state.CurrentLayer == "Collision" {
-		newID = 1 // Collision layer uses 1 for solid
+		// Collision layer: use 1 for solid, 0 for empty
+		if state.SelectedCollision {
+			newID = 1
+		} else {
+			newID = 0
+		}
+	} else {
+		// Tiles layer: use Tiled's 1-based tile IDs
+		newID = state.SelectedTile + 1 // Convert 0-based to 1-based
 	}
 
 	// Create the fill action (it records all changes internally)

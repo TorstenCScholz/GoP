@@ -60,6 +60,13 @@ func NewApp() *App {
 		propertiesPanel: propertiesPanel,
 	}
 
+	// Set up the link mode callback from properties panel
+	propertiesPanel.OnStartLinkMode = func(switchIndex int) {
+		state.StartLinkMode(switchIndex)
+		state.ShowStatusMessage("Click on a door to link, or press Escape to cancel", false)
+		log.Printf("Started link mode for switch at index %d", switchIndex)
+	}
+
 	// Create playtest controller with reference to app
 	app.playtest = NewPlaytestController(app)
 
@@ -89,6 +96,12 @@ func (a *App) Update() error {
 			return nil
 		}
 	}
+
+	// Track Space key state for drag-to-scroll
+	a.state.SpacePressed = ebiten.IsKeyPressed(ebiten.KeySpace)
+
+	// Handle Space+Left-click drag panning
+	a.handleDragPan()
 
 	// Handle keyboard shortcuts for file operations
 	a.handleFileShortcuts()
@@ -128,6 +141,43 @@ func (a *App) Update() error {
 	return nil
 }
 
+// handleDragPan handles Space+Left-click drag panning.
+func (a *App) handleDragPan() {
+	// Only handle pan if Space is pressed
+	if !a.state.SpacePressed {
+		// End any ongoing pan when Space is released
+		if a.camera.IsDragging {
+			a.camera.EndDrag()
+		}
+		return
+	}
+
+	mx, my := ebiten.CursorPosition()
+
+	// Check if mouse is in canvas area (not in palettes)
+	screenWidth := a.screenWidth
+	if screenWidth == 0 {
+		screenWidth = 1280
+	}
+	canvasWidth := screenWidth - PaletteWidth - ObjectPaletteWidth
+	if mx >= canvasWidth {
+		return
+	}
+
+	// Start or continue drag pan on left mouse button
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		a.camera.StartDrag(float64(mx), float64(my))
+	}
+
+	if a.camera.IsDragging && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		a.camera.UpdateDrag(float64(mx), float64(my))
+	}
+
+	if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		a.camera.EndDrag()
+	}
+}
+
 // handlePaletteInput handles mouse input for tile selection from the palette.
 func (a *App) handlePaletteInput() {
 	if !a.tileset.IsLoaded() {
@@ -142,6 +192,21 @@ func (a *App) handlePaletteInput() {
 			screenWidth = 1280 // Default width
 		}
 		if a.tileset.IsInPalette(mx, my, screenWidth) {
+			// Handle collision palette differently
+			if a.state.CurrentLayer == "Collision" {
+				solid, valid := a.tileset.CollisionAtPosition(mx, my, screenWidth)
+				if valid {
+					a.state.SelectCollision(solid)
+					a.state.SetTool(ToolPaint)
+					if solid {
+						log.Println("Selected collision: Solid")
+					} else {
+						log.Println("Selected collision: Empty")
+					}
+				}
+				return
+			}
+
 			// Calculate tile position within palette
 			paletteX := screenWidth - PaletteWidth - ObjectPaletteWidth
 			localX := mx - paletteX - PalettePadding
@@ -388,10 +453,15 @@ func (a *App) handleToolShortcuts() {
 		}
 	}
 
-	// Escape - Clear selection and close help
+	// Escape - Clear selection, close help, or cancel link mode
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		if a.showHelp {
 			a.showHelp = false
+		} else if a.state.IsInLinkMode() {
+			// Cancel link mode
+			a.state.EndLinkMode()
+			a.state.ShowStatusMessage("Link cancelled", false)
+			log.Println("Cancelled link mode")
 		} else if a.state.HasSelection() {
 			a.state.ClearSelection()
 			selection := a.state.GetSelectionManager()
@@ -484,6 +554,12 @@ func (a *App) newLevel() {
 	a.canvas.tools.SetObjectPalette(a.objectPalette)
 	// Update properties panel with new state
 	a.propertiesPanel.SetState(a.state)
+	// Re-set the link mode callback
+	a.propertiesPanel.OnStartLinkMode = func(switchIndex int) {
+		a.state.StartLinkMode(switchIndex)
+		a.state.ShowStatusMessage("Click on a door to link, or press Escape to cancel", false)
+		log.Printf("Started link mode for switch at index %d", switchIndex)
+	}
 	log.Println("Created new level")
 }
 
@@ -511,6 +587,12 @@ func (a *App) openLevel() {
 	a.canvas.tools.SetObjectPalette(a.objectPalette)
 	// Update properties panel with new state
 	a.propertiesPanel.SetState(a.state)
+	// Re-set the link mode callback
+	a.propertiesPanel.OnStartLinkMode = func(switchIndex int) {
+		a.state.StartLinkMode(switchIndex)
+		a.state.ShowStatusMessage("Click on a door to link, or press Escape to cancel", false)
+		log.Printf("Started link mode for switch at index %d", switchIndex)
+	}
 	log.Printf("Opened level: %s", a.state.FilePath)
 	a.state.ShowStatusMessage(fmt.Sprintf("Opened: %s", a.state.FilePath), false)
 }
@@ -599,10 +681,14 @@ func (a *App) Draw(screen *ebiten.Image) {
 	// Draw tilemap canvas (left portion of screen)
 	a.canvas.Draw(screen)
 
-	// Draw tile palette (right sidebar, upper portion)
+	// Draw tile palette or collision palette (right sidebar, upper portion)
 	screenWidth, screenHeight := screen.Size()
 	tilePaletteX := screenWidth - PaletteWidth - ObjectPaletteWidth
-	a.tileset.DrawPaletteAt(screen, a.state.SelectedTile, tilePaletteX)
+	if a.state.CurrentLayer == "Collision" {
+		a.tileset.DrawCollisionPaletteAt(screen, a.state.SelectedCollision, tilePaletteX)
+	} else {
+		a.tileset.DrawPaletteAt(screen, a.state.SelectedTile, tilePaletteX)
+	}
 
 	// Draw object palette (right sidebar, middle portion)
 	a.objectPalette.Draw(screen, 0)

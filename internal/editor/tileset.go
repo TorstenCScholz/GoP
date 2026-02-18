@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/torsten/GoP/internal/assets"
 	"github.com/torsten/GoP/internal/world"
 )
@@ -129,6 +130,67 @@ func (t *Tileset) DrawPalette(screen *ebiten.Image, selectedTile int) {
 	t.DrawPaletteAt(screen, selectedTile, paletteX)
 }
 
+// DrawCollisionPalette renders the collision palette to the screen.
+// Shows two options: Solid (red) and Empty (gray).
+func (t *Tileset) DrawCollisionPalette(screen *ebiten.Image, selectedSolid bool) {
+	// Get screen dimensions
+	screenWidth, _ := screen.Size()
+
+	// Calculate palette position (right side of screen)
+	paletteX := screenWidth - PaletteWidth - ObjectPaletteWidth
+
+	t.DrawCollisionPaletteAt(screen, selectedSolid, paletteX)
+}
+
+// DrawCollisionPaletteAt renders the collision palette at a specific X position.
+func (t *Tileset) DrawCollisionPaletteAt(screen *ebiten.Image, selectedSolid bool, paletteX int) {
+	// Draw palette background
+	paletteBg := ebiten.NewImage(PaletteWidth, screen.Bounds().Dy())
+	paletteBg.Fill(paletteBgColor)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(paletteX), 0)
+	screen.DrawImage(paletteBg, op)
+
+	// Draw title
+	ebitenutil.DebugPrintAt(screen, "Collision", paletteX+PalettePadding, PalettePadding)
+
+	// Draw two collision options
+	optionSize := 48
+	optionY := PalettePadding + 20
+
+	// Solid option (red)
+	solidX := paletteX + PalettePadding
+	solidImg := ebiten.NewImage(optionSize, optionSize)
+	solidImg.Fill(collisionSolidColor)
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(solidX), float64(optionY))
+	screen.DrawImage(solidImg, op)
+
+	// Draw "Solid" label
+	ebitenutil.DebugPrintAt(screen, "Solid", solidX, optionY+optionSize+4)
+
+	// Highlight if selected
+	if selectedSolid {
+		ebitenutil.DrawRect(screen, float64(solidX)-2, float64(optionY)-2, float64(optionSize)+4, float64(optionSize)+4, selectionColor)
+	}
+
+	// Empty option (gray)
+	emptyX := paletteX + PalettePadding + optionSize + 16
+	emptyImg := ebiten.NewImage(optionSize, optionSize)
+	emptyImg.Fill(collisionEmptyColor)
+	op = &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(emptyX), float64(optionY))
+	screen.DrawImage(emptyImg, op)
+
+	// Draw "Empty" label
+	ebitenutil.DebugPrintAt(screen, "Empty", emptyX, optionY+optionSize+4)
+
+	// Highlight if selected
+	if !selectedSolid {
+		ebitenutil.DrawRect(screen, float64(emptyX)-2, float64(optionY)-2, float64(optionSize)+4, float64(optionSize)+4, selectionColor)
+	}
+}
+
 // DrawPaletteAt renders the tile palette at a specific X position.
 func (t *Tileset) DrawPaletteAt(screen *ebiten.Image, selectedTile int, paletteX int) {
 	if t.paletteImg == nil {
@@ -220,8 +282,44 @@ func (t *Tileset) IsInPalette(screenX, screenY, screenWidth int) bool {
 	return screenX >= paletteX && screenX < paletteX+PaletteWidth
 }
 
+// CollisionAtPosition returns the collision value at the given screen position within the collision palette.
+// Returns true for solid, false for empty, and -1 for invalid position.
+// The second return value indicates whether the position is valid.
+func (t *Tileset) CollisionAtPosition(screenX, screenY, screenWidth int) (bool, bool) {
+	paletteX := screenWidth - PaletteWidth - ObjectPaletteWidth
+
+	// Check if within palette area
+	if screenX < paletteX || screenX >= paletteX+PaletteWidth {
+		return false, false
+	}
+
+	// Calculate option positions
+	optionSize := 48
+	optionY := PalettePadding + 20
+	solidX := paletteX + PalettePadding
+	emptyX := paletteX + PalettePadding + optionSize + 16
+
+	// Check if within solid option
+	if screenX >= solidX && screenX < solidX+optionSize &&
+		screenY >= optionY && screenY < optionY+optionSize {
+		return true, true // Solid selected
+	}
+
+	// Check if within empty option
+	if screenX >= emptyX && screenX < emptyX+optionSize &&
+		screenY >= optionY && screenY < optionY+optionSize {
+		return false, true // Empty selected
+	}
+
+	return false, false // Invalid position
+}
+
 // Colors for palette rendering
 var (
-	paletteBgColor = color.RGBA{40, 40, 50, 255}
-	selectionColor = color.RGBA{100, 200, 255, 255}
+	paletteBgColor      = color.RGBA{40, 40, 50, 255}
+	selectionColor      = color.RGBA{100, 200, 255, 255}
+	collisionSolidColor = color.RGBA{255, 60, 60, 255}   // Red for solid collision
+	collisionEmptyColor = color.RGBA{100, 100, 100, 255} // Gray for empty/no collision
+	collisionSolidBg    = color.RGBA{255, 60, 60, 180}   // Semi-transparent red
+	collisionEmptyBg    = color.RGBA{60, 60, 60, 180}    // Semi-transparent gray
 )
