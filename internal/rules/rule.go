@@ -3,10 +3,13 @@ package rules
 // WhenClause defines when a rule should trigger.
 type WhenClause struct {
 	// Event is the event type to match
-	Event string `yaml:"event"`
-	// Source is an optional specific source ID to match
-	// If empty, matches any source
-	Source string `yaml:"source,omitempty"`
+	Event EventType `yaml:"event"`
+	// Region is the region/trigger ID to match
+	// If empty, matches any region
+	Region string `yaml:"region,omitempty"`
+	// Actor is the actor type to match: "player", "enemy", etc.
+	// If empty, matches any actor
+	Actor string `yaml:"actor,omitempty"`
 }
 
 // ActionSpec defines an action to execute when a rule triggers.
@@ -51,8 +54,13 @@ func (r *Rule) matchesEvent(event Event) bool {
 		return false
 	}
 
-	// Check source if specified
-	if r.When.Source != "" && r.When.Source != event.Source {
+	// Check region if specified
+	if r.When.Region != "" && r.When.Region != event.RegionID {
+		return false
+	}
+
+	// Check actor if specified
+	if r.When.Actor != "" && r.When.Actor != event.ActorType {
 		return false
 	}
 

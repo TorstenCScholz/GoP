@@ -61,15 +61,16 @@ func TestParseYAML_ValidRules(t *testing.T) {
 rules:
   - id: test_rule_1
     when:
-      event: EnterRegion
-      source: trigger_1
+      event: enter_region
+      region: trigger_1
+      actor: player
     actions:
       - type: activate
         target: door_1
     once: true
   - id: test_rule_2
     when:
-      event: ExitRegion
+      event: exit_region
     actions:
       - type: toggle
         target: door_2
@@ -91,8 +92,11 @@ rules:
 	if rule1.When.Event != EventEnterRegion {
 		t.Errorf("expected event '%s', got '%s'", EventEnterRegion, rule1.When.Event)
 	}
-	if rule1.When.Source != "trigger_1" {
-		t.Errorf("expected source 'trigger_1', got '%s'", rule1.When.Source)
+	if rule1.When.Region != "trigger_1" {
+		t.Errorf("expected region 'trigger_1', got '%s'", rule1.When.Region)
+	}
+	if rule1.When.Actor != "player" {
+		t.Errorf("expected actor 'player', got '%s'", rule1.When.Actor)
 	}
 	if !rule1.Once {
 		t.Error("expected Once to be true")
@@ -112,8 +116,8 @@ rules:
 	if rule2.ID != "test_rule_2" {
 		t.Errorf("expected ID 'test_rule_2', got '%s'", rule2.ID)
 	}
-	if rule2.When.Source != "" {
-		t.Errorf("expected empty source, got '%s'", rule2.When.Source)
+	if rule2.When.Region != "" {
+		t.Errorf("expected empty region, got '%s'", rule2.When.Region)
 	}
 }
 
@@ -122,7 +126,7 @@ func TestParseJSON_ValidRules(t *testing.T) {
 		"rules": [
 			{
 				"id": "json_rule",
-				"when": {"event": "Death", "source": "hazard_1"},
+				"when": {"event": "enter_region", "region": "hazard_1"},
 				"actions": [{"type": "activate", "target": "checkpoint_1"}]
 			}
 		]
@@ -141,8 +145,8 @@ func TestParseJSON_ValidRules(t *testing.T) {
 	if rule.ID != "json_rule" {
 		t.Errorf("expected ID 'json_rule', got '%s'", rule.ID)
 	}
-	if rule.When.Event != EventDeath {
-		t.Errorf("expected event '%s', got '%s'", EventDeath, rule.When.Event)
+	if rule.When.Event != EventEnterRegion {
+		t.Errorf("expected event '%s', got '%s'", EventEnterRegion, rule.When.Event)
 	}
 }
 
@@ -164,7 +168,7 @@ func TestParseYAML_InvalidYAML(t *testing.T) {
 rules:
   - id: [invalid array for id]
     when:
-      event: EnterRegion
+      event: enter_region
 `
 	_, err := ParseYAML([]byte(yamlData))
 	if err == nil {
@@ -200,7 +204,7 @@ rules:
 		t.Fatalf("ParseYAML failed: %v", err)
 	}
 
-	if ruleSet.Rules[0].When.Event != "CustomEvent" {
+	if ruleSet.Rules[0].When.Event != EventType("CustomEvent") {
 		t.Errorf("expected event 'CustomEvent', got '%s'", ruleSet.Rules[0].When.Event)
 	}
 }
@@ -211,7 +215,7 @@ func TestParseYAML_AcceptsAnyActionType(t *testing.T) {
 rules:
   - id: test_rule
     when:
-      event: EnterRegion
+      event: enter_region
     actions:
       - type: custom_action
         target: target_1
@@ -233,7 +237,8 @@ rules:
   - id: ""
     when:
       event: ""
-      source: ""
+      region: ""
+      actor: ""
     actions:
       - type: ""
         target: ""
@@ -263,7 +268,8 @@ func TestProcessEvent_CorrectMatchFiresActions(t *testing.T) {
 			ID: "test_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
+				Actor:  "player",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "door_1"},
@@ -274,7 +280,7 @@ func TestProcessEvent_CorrectMatchFiresActions(t *testing.T) {
 	})
 
 	// Process matching event
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	// Verify action was executed
@@ -293,7 +299,7 @@ func TestProcessEvent_WrongEventTypeDoesNotFire(t *testing.T) {
 			ID: "test_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "door_1"},
@@ -303,7 +309,7 @@ func TestProcessEvent_WrongEventTypeDoesNotFire(t *testing.T) {
 	})
 
 	// Process non-matching event type
-	event := NewEvent(EventExitRegion, "trigger_1", nil)
+	event := NewEvent(EventExitRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	// Verify action was NOT executed
@@ -312,7 +318,7 @@ func TestProcessEvent_WrongEventTypeDoesNotFire(t *testing.T) {
 	}
 }
 
-func TestProcessEvent_WrongSourceDoesNotFire(t *testing.T) {
+func TestProcessEvent_WrongRegionDoesNotFire(t *testing.T) {
 	resolver := newMockResolver()
 	target := resolver.addTarget("door_1")
 
@@ -322,7 +328,7 @@ func TestProcessEvent_WrongSourceDoesNotFire(t *testing.T) {
 			ID: "test_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "door_1"},
@@ -331,17 +337,17 @@ func TestProcessEvent_WrongSourceDoesNotFire(t *testing.T) {
 		},
 	})
 
-	// Process event with wrong source
-	event := NewEvent(EventEnterRegion, "trigger_2", nil)
+	// Process event with wrong region
+	event := NewEvent(EventEnterRegion, "trigger_2", "player")
 	engine.ProcessEvent(event)
 
 	// Verify action was NOT executed
 	if target.activated {
-		t.Error("expected target NOT to be activated for wrong source")
+		t.Error("expected target NOT to be activated for wrong region")
 	}
 }
 
-func TestProcessEvent_EmptySourceMatchesAny(t *testing.T) {
+func TestProcessEvent_WrongActorDoesNotFire(t *testing.T) {
 	resolver := newMockResolver()
 	target := resolver.addTarget("door_1")
 
@@ -351,7 +357,8 @@ func TestProcessEvent_EmptySourceMatchesAny(t *testing.T) {
 			ID: "test_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "", // Empty source matches any
+				Region: "trigger_1",
+				Actor:  "player",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "door_1"},
@@ -360,14 +367,75 @@ func TestProcessEvent_EmptySourceMatchesAny(t *testing.T) {
 		},
 	})
 
-	// Process events from different sources
-	for _, source := range []string{"trigger_1", "trigger_2", "any_source"} {
+	// Process event with wrong actor
+	event := NewEvent(EventEnterRegion, "trigger_1", "enemy")
+	engine.ProcessEvent(event)
+
+	// Verify action was NOT executed
+	if target.activated {
+		t.Error("expected target NOT to be activated for wrong actor")
+	}
+}
+
+func TestProcessEvent_EmptyRegionMatchesAny(t *testing.T) {
+	resolver := newMockResolver()
+	target := resolver.addTarget("door_1")
+
+	engine := NewEngine(resolver)
+	engine.LoadRules([]Rule{
+		{
+			ID: "test_rule",
+			When: WhenClause{
+				Event:  EventEnterRegion,
+				Region: "", // Empty region matches any
+			},
+			Actions: []ActionSpec{
+				{Type: ActionActivate, Target: "door_1"},
+			},
+			Active: true,
+		},
+	})
+
+	// Process events from different regions
+	for _, region := range []string{"trigger_1", "trigger_2", "any_region"} {
 		target.activated = false // Reset
-		event := NewEvent(EventEnterRegion, source, nil)
+		event := NewEvent(EventEnterRegion, region, "player")
 		engine.ProcessEvent(event)
 
 		if !target.activated {
-			t.Errorf("expected target to be activated for source '%s'", source)
+			t.Errorf("expected target to be activated for region '%s'", region)
+		}
+	}
+}
+
+func TestProcessEvent_EmptyActorMatchesAny(t *testing.T) {
+	resolver := newMockResolver()
+	target := resolver.addTarget("door_1")
+
+	engine := NewEngine(resolver)
+	engine.LoadRules([]Rule{
+		{
+			ID: "test_rule",
+			When: WhenClause{
+				Event:  EventEnterRegion,
+				Region: "trigger_1",
+				Actor:  "", // Empty actor matches any
+			},
+			Actions: []ActionSpec{
+				{Type: ActionActivate, Target: "door_1"},
+			},
+			Active: true,
+		},
+	})
+
+	// Process events from different actors
+	for _, actor := range []string{"player", "enemy", "npc"} {
+		target.activated = false // Reset
+		event := NewEvent(EventEnterRegion, "trigger_1", actor)
+		engine.ProcessEvent(event)
+
+		if !target.activated {
+			t.Errorf("expected target to be activated for actor '%s'", actor)
 		}
 	}
 }
@@ -382,7 +450,7 @@ func TestProcessEvent_OnceTrueFiresOnlyOnce(t *testing.T) {
 			ID: "once_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionToggle, Target: "door_1"},
@@ -393,7 +461,7 @@ func TestProcessEvent_OnceTrueFiresOnlyOnce(t *testing.T) {
 	})
 
 	// First event should fire
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 	if target.toggled != 1 {
 		t.Errorf("expected 1 toggle after first event, got %d", target.toggled)
@@ -422,7 +490,7 @@ func TestProcessEvent_OnceFalseFiresEveryTime(t *testing.T) {
 			ID: "repeating_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionToggle, Target: "door_1"},
@@ -432,7 +500,7 @@ func TestProcessEvent_OnceFalseFiresEveryTime(t *testing.T) {
 		},
 	})
 
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 
 	// Each event should fire
 	for i := 1; i <= 5; i++ {
@@ -453,7 +521,7 @@ func TestProcessEvent_InactiveRuleDoesNotFire(t *testing.T) {
 			ID: "inactive_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "door_1"},
@@ -466,7 +534,7 @@ func TestProcessEvent_InactiveRuleDoesNotFire(t *testing.T) {
 	// This test documents the current behavior. The rule will fire because
 	// LoadRules overwrites Active=false to Active=true.
 	// See engine.go:LoadRules for the problematic logic.
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	// Current behavior: rule fires despite Active=false due to LoadRules bug
@@ -626,7 +694,7 @@ func TestProcessEvent_EmptyRuleSet(t *testing.T) {
 	engine := NewEngine(resolver)
 
 	// Should not panic with empty ruleset
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	// No assertions needed - just verifying no panic
@@ -644,7 +712,7 @@ func TestProcessEvent_MultipleRulesMatchSameEvent(t *testing.T) {
 			ID: "rule_1",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "target_1"},
@@ -655,7 +723,7 @@ func TestProcessEvent_MultipleRulesMatchSameEvent(t *testing.T) {
 			ID: "rule_2",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "target_2"},
@@ -666,7 +734,7 @@ func TestProcessEvent_MultipleRulesMatchSameEvent(t *testing.T) {
 			ID: "rule_3",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "target_3"},
@@ -675,7 +743,7 @@ func TestProcessEvent_MultipleRulesMatchSameEvent(t *testing.T) {
 		},
 	})
 
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	// All three rules should have fired
@@ -702,7 +770,7 @@ func TestProcessEvent_MultipleActionsInSingleRule(t *testing.T) {
 			ID: "multi_action_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "target_1"},
@@ -713,7 +781,7 @@ func TestProcessEvent_MultipleActionsInSingleRule(t *testing.T) {
 		},
 	})
 
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 	engine.ProcessEvent(event)
 
 	if !target1.activated {
@@ -737,7 +805,7 @@ func TestProcessEvent_MissingTargetLogsWarning(t *testing.T) {
 			ID: "test_rule",
 			When: WhenClause{
 				Event:  EventEnterRegion,
-				Source: "trigger_1",
+				Region: "trigger_1",
 			},
 			Actions: []ActionSpec{
 				{Type: ActionActivate, Target: "missing_target"},
@@ -746,7 +814,7 @@ func TestProcessEvent_MissingTargetLogsWarning(t *testing.T) {
 		},
 	})
 
-	event := NewEvent(EventEnterRegion, "trigger_1", nil)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 
 	// Should not panic when target is missing
 	engine.ProcessEvent(event)
@@ -768,7 +836,7 @@ func TestEngine_Clear(t *testing.T) {
 	})
 
 	// Fire the once rule
-	event := NewEvent(EventEnterRegion, "source", nil)
+	event := NewEvent(EventEnterRegion, "source", "player")
 	engine.ProcessEvent(event)
 
 	// Clear the engine
@@ -827,7 +895,7 @@ func TestEngine_LoadYAML(t *testing.T) {
 rules:
   - id: yaml_rule
     when:
-      event: EnterRegion
+      event: enter_region
     actions:
       - type: activate
         target: target_1
@@ -849,7 +917,7 @@ func TestEngine_LoadJSON(t *testing.T) {
 
 	jsonData := `{
 		"rules": [
-			{"id": "json_rule", "when": {"event": "EnterRegion"}, "actions": [{"type": "activate", "target": "target_1"}]}
+			{"id": "json_rule", "when": {"event": "enter_region"}, "actions": [{"type": "activate", "target": "target_1"}]}
 		]
 	}`
 
@@ -873,46 +941,64 @@ func TestRule_MatchesEvent(t *testing.T) {
 		{
 			name: "exact match",
 			rule: Rule{
-				When:   WhenClause{Event: EventEnterRegion, Source: "trigger_1"},
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1", Actor: "player"},
 				Active: true,
 			},
-			event:    NewEvent(EventEnterRegion, "trigger_1", nil),
+			event:    NewEvent(EventEnterRegion, "trigger_1", "player"),
 			expected: true,
 		},
 		{
 			name: "event type mismatch",
 			rule: Rule{
-				When:   WhenClause{Event: EventEnterRegion, Source: "trigger_1"},
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1"},
 				Active: true,
 			},
-			event:    NewEvent(EventExitRegion, "trigger_1", nil),
+			event:    NewEvent(EventExitRegion, "trigger_1", "player"),
 			expected: false,
 		},
 		{
-			name: "source mismatch",
+			name: "region mismatch",
 			rule: Rule{
-				When:   WhenClause{Event: EventEnterRegion, Source: "trigger_1"},
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1"},
 				Active: true,
 			},
-			event:    NewEvent(EventEnterRegion, "trigger_2", nil),
+			event:    NewEvent(EventEnterRegion, "trigger_2", "player"),
 			expected: false,
 		},
 		{
-			name: "empty source matches any",
+			name: "actor mismatch",
 			rule: Rule{
-				When:   WhenClause{Event: EventEnterRegion, Source: ""},
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1", Actor: "player"},
 				Active: true,
 			},
-			event:    NewEvent(EventEnterRegion, "any_source", nil),
+			event:    NewEvent(EventEnterRegion, "trigger_1", "enemy"),
+			expected: false,
+		},
+		{
+			name: "empty region matches any",
+			rule: Rule{
+				When:   WhenClause{Event: EventEnterRegion, Region: ""},
+				Active: true,
+			},
+			event:    NewEvent(EventEnterRegion, "any_region", "player"),
+			expected: true,
+		},
+		{
+			name: "empty actor matches any",
+			rule: Rule{
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1", Actor: ""},
+				Active: true,
+			},
+			event:    NewEvent(EventEnterRegion, "trigger_1", "any_actor"),
 			expected: true,
 		},
 		{
 			name: "inactive rule",
 			rule: Rule{
-				When:   WhenClause{Event: EventEnterRegion, Source: "trigger_1"},
+				When:   WhenClause{Event: EventEnterRegion, Region: "trigger_1"},
 				Active: false,
 			},
-			event:    NewEvent(EventEnterRegion, "trigger_1", nil),
+			event:    NewEvent(EventEnterRegion, "trigger_1", "player"),
 			expected: false,
 		},
 	}
@@ -929,7 +1015,7 @@ func TestRule_MatchesEvent(t *testing.T) {
 
 func TestNewActionContext(t *testing.T) {
 	resolver := newMockResolver()
-	event := NewEvent(EventEnterRegion, "source", map[string]any{"key": "value"})
+	event := NewEvent(EventEnterRegion, "source", "player")
 
 	ctx := NewActionContext(event, resolver)
 
@@ -939,29 +1025,18 @@ func TestNewActionContext(t *testing.T) {
 	if ctx.Resolver == nil {
 		t.Error("expected resolver to be set")
 	}
-	if ctx.Params == nil {
-		t.Error("expected params map to be initialized")
-	}
 }
 
 func TestNewEvent(t *testing.T) {
-	// Test with data
-	data := map[string]any{"key": "value"}
-	event := NewEvent(EventEnterRegion, "source", data)
+	event := NewEvent(EventEnterRegion, "trigger_1", "player")
 
 	if event.Type != EventEnterRegion {
 		t.Errorf("expected type '%s', got '%s'", EventEnterRegion, event.Type)
 	}
-	if event.Source != "source" {
-		t.Errorf("expected source 'source', got '%s'", event.Source)
+	if event.RegionID != "trigger_1" {
+		t.Errorf("expected regionID 'trigger_1', got '%s'", event.RegionID)
 	}
-	if event.Data["key"] != "value" {
-		t.Error("expected data to be preserved")
-	}
-
-	// Test with nil data
-	event2 := NewEvent(EventDeath, "hazard", nil)
-	if event2.Data == nil {
-		t.Error("expected nil data to be converted to empty map")
+	if event.ActorType != "player" {
+		t.Errorf("expected actorType 'player', got '%s'", event.ActorType)
 	}
 }

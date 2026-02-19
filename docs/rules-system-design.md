@@ -94,50 +94,52 @@ internal/rules/
 An Event represents something that happened in the game:
 
 ```go
-// Event represents a game event that can trigger rules
-type Event struct {
-    Type   string         // Event type, e.g., "EnterRegion", "ExitRegion"
-    Source string         // Entity ID that triggered the event
-    Data   map[string]any // Additional event data
-}
+// EventType defines the type of game event.
+type EventType string
 
-// Common event types
+// MVP event types.
 const (
-    EventEnterRegion  = "EnterRegion"
-    EventExitRegion   = "ExitRegion"
-    EventDeath        = "Death"
-    EventCheckpoint   = "Checkpoint"
-    EventGoalReached  = "GoalReached"
-    EventTimerExpired = "TimerExpired"
+    // EventEnterRegion is emitted when a player enters a trigger region
+    EventEnterRegion EventType = "enter_region"
+    // EventExitRegion is emitted when a player exits a trigger region
+    EventExitRegion EventType = "exit_region"
 )
+
+// Event represents a game event that can trigger rules.
+type Event struct {
+    Type      EventType // Event type: "enter_region" or "exit_region"
+    RegionID  string    // Region/trigger ID (e.g., "switch_A")
+    ActorType string    // Actor type: "player", "enemy", etc. (MVP: only "player")
+}
 ```
 
 #### Rule and RuleSet
 
 ```go
-// WhenClause defines when a rule should trigger
+// WhenClause defines when a rule should trigger.
 type WhenClause struct {
-    Event  string `yaml:"event"`  // Event type to match
-    Source string `yaml:"source"` // Optional: specific source ID
+    Event  EventType `yaml:"event"`            // Event type to match
+    Region string    `yaml:"region,omitempty"` // Optional: region/trigger ID to match
+    Actor  string    `yaml:"actor,omitempty"`  // Optional: actor type to match ("player", "enemy")
 }
 
-// ActionSpec defines an action to execute
+// ActionSpec defines an action to execute when a rule triggers.
 type ActionSpec struct {
-    Type   string         `yaml:"type"`   // Action type: activate, deactivate, toggle
-    Target string         `yaml:"target"` // Target entity ID
-    Params map[string]any `yaml:"params"` // Optional parameters
+    Type   string         `yaml:"type"`            // Action type: activate, deactivate, toggle
+    Target string         `yaml:"target"`          // Target entity ID
+    Params map[string]any `yaml:"params,omitempty"` // Optional parameters
 }
 
-// Rule is a single rule definition
+// Rule is a single rule definition.
 type Rule struct {
     ID      string       `yaml:"id"`
     When    WhenClause   `yaml:"when"`
     Actions []ActionSpec `yaml:"actions"`
-    Once    bool         `yaml:"once"`    // If true, rule fires only once
-    Active  bool         `yaml:"active"`  // Rule enabled/disabled
+    Once    bool         `yaml:"once,omitempty"`   // If true, rule fires only once
+    Active  bool         `yaml:"active,omitempty"` // Rule enabled/disabled (default: true)
 }
 
-// RuleSet is a collection of rules
+// RuleSet is a collection of rules loaded from a file.
 type RuleSet struct {
     Rules []Rule `yaml:"rules"`
 }
@@ -146,15 +148,15 @@ type RuleSet struct {
 #### ActionContext
 
 ```go
-// ActionContext provides context for action execution
+// ActionContext provides context for action execution.
 type ActionContext struct {
-    Event    Event
-    Registry TargetResolver
-    Params   map[string]any
+    Event    Event          // The event that triggered this action
+    Resolver TargetResolver // Used to look up target entities
+    Logf     func(format string, args ...any) // Optional logging function
 }
 
-// TargetResolver is a minimal interface for the registry
-// This matches the existing TargetRegistry.Resolve method
+// TargetResolver is a minimal interface for the registry.
+// This matches the existing TargetRegistry.Resolve method.
 type TargetResolver interface {
     Resolve(id string) Targetable
 }
@@ -186,7 +188,7 @@ sequenceDiagram
     participant Registry as TargetRegistry
     participant Target as Targetable Entity
     
-    Trigger->>Engine: ProcessEvent EnterRegion source=switch_1
+    Trigger->>Engine: ProcessEvent enter_region regionID=switch_1
     Engine->>Engine: Find matching rules
     Engine->>Engine: Check conditions
     Engine->>Registry: Resolve target door_1
@@ -202,8 +204,8 @@ rules:
   # Simple switch → door toggle
   - id: switch_1_opens_door_1
     when:
-      event: EnterRegion
-      source: switch_1
+      event: enter_region
+      region: switch_1
     actions:
       - type: toggle
         target: door_1
@@ -211,8 +213,8 @@ rules:
   # Multiple actions from one trigger
   - id: master_switch_opens_all
     when:
-      event: EnterRegion
-      source: master_switch
+      event: enter_region
+      region: master_switch
     actions:
       - type: activate
         target: door_1
@@ -224,8 +226,8 @@ rules:
   # One-shot rule
   - id: secret_door_once
     when:
-      event: EnterRegion
-      source: secret_trigger
+      event: enter_region
+      region: secret_trigger
     actions:
       - type: activate
         target: secret_door
@@ -234,11 +236,21 @@ rules:
   # Exit trigger
   - id: close_on_exit
     when:
-      event: ExitRegion
-      source: pressure_plate
+      event: exit_region
+      region: pressure_plate
     actions:
       - type: deactivate
         target: door_1
+
+  # Actor-specific rule (future: enemy triggers)
+  - id: player_only_trigger
+    when:
+      event: enter_region
+      region: special_switch
+      actor: player
+    actions:
+      - type: activate
+        target: special_door
 ```
 
 ## Integration Plan
@@ -268,8 +280,9 @@ type EventEmitter interface {
 func (s *Switch) OnEnter(player *physics.Body) {
     if s.eventEmitter != nil {
         s.eventEmitter.EmitEvent(Event{
-            Type:   EventEnterRegion,
-            Source: s.id, // Switch needs an ID
+            Type:      EventEnterRegion,
+            RegionID:  s.id,
+            ActorType: "player",
         })
     }
 }
@@ -283,8 +296,9 @@ Triggers hold a reference to `RuleEngine`:
 func (s *Switch) OnEnter(player *physics.Body) {
     if s.ruleEngine != nil {
         s.ruleEngine.ProcessEvent(Event{
-            Type:   EventEnterRegion,
-            Source: s.targetID, // Use existing targetID as source
+            Type:      EventEnterRegion,
+            RegionID:  s.id,
+            ActorType: "player",
         })
     }
 }
@@ -333,7 +347,7 @@ Add a custom property to the level:
     {
       "name": "rules",
       "type": "string",
-      "value": "rules:\n  - id: switch_1_door\n    when:\n      event: EnterRegion\n      source: switch_1\n    actions:\n      - type: toggle\n        target: door_1"
+      "value": "rules:\n  - id: switch_1_door\n    when:\n      event: enter_region\n      region: switch_1\n    actions:\n      - type: toggle\n        target: door_1"
     }
   ]
 }
@@ -372,22 +386,22 @@ assets/
 
 ### Built-in Events (MVP)
 
-| Event | Source | Data |
-|-------|--------|------|
-| `EnterRegion` | Trigger entity ID | `{player_id: string}` |
-| `ExitRegion` | Trigger entity ID | `{player_id: string}` |
-| `Death` | Hazard entity ID | `{player_id: string}` |
-| `Checkpoint` | Checkpoint ID | `{player_id: string, position: {x, y}}` |
-| `GoalReached` | Goal entity ID | `{player_id: string}` |
+| Event | RegionID | ActorType |
+|-------|----------|-----------|
+| `enter_region` | Trigger/region ID (e.g., "switch_A") | "player" (MVP only supports player) |
+| `exit_region` | Trigger/region ID (e.g., "switch_A") | "player" (MVP only supports player) |
 
 ### Future Events (Post-MVP)
 
 | Event | Description |
 |-------|-------------|
-| `TimerExpired` | A timer has finished |
-| `EntityDestroyed` | An entity was removed |
-| `StateChange` | Entity state changed |
-| `Custom` | User-defined events |
+| `death` | Player died at a hazard |
+| `checkpoint` | Player reached a checkpoint |
+| `goal_reached` | Player reached the level goal |
+| `timer_expired` | A timer has finished |
+| `entity_destroyed` | An entity was removed |
+| `state_change` | Entity state changed |
+| `custom` | User-defined events |
 
 ## Extensibility
 
@@ -496,8 +510,9 @@ func (s *Switch) OnEnter(player *physics.Body) {
 func (s *Switch) OnEnter(player *physics.Body) {
     if s.useRules && s.ruleEngine != nil {
         s.ruleEngine.ProcessEvent(Event{
-            Type:   EventEnterRegion,
-            Source: s.id,
+            Type:      EventEnterRegion,
+            RegionID:  s.id,
+            ActorType: "player",
         })
     } else {
         // Legacy behavior
@@ -517,8 +532,8 @@ func (s *Switch) OnEnter(player *physics.Body) {
 rules:
   - id: switch_1_toggle_door
     when:
-      event: EnterRegion
-      source: switch_1
+      event: enter_region
+      region: switch_1
     actions:
       - type: toggle
         target: door_1

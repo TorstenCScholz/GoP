@@ -1,6 +1,9 @@
 package editor
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/torsten/GoP/internal/world"
 )
 
@@ -175,5 +178,120 @@ func CreateDefaultObject(typ world.ObjectType, x, y float64) world.ObjectData {
 		W:     schema.DefaultW,
 		H:     schema.DefaultH,
 		Props: props,
+	}
+}
+
+// NeedsAutoID returns true if the object type needs an auto-generated ID property.
+// These are entities that can be targeted by other entities (e.g., doors, platforms, checkpoints).
+func NeedsAutoID(typ world.ObjectType) bool {
+	switch typ {
+	case world.ObjectTypeDoor, world.ObjectTypePlatform, world.ObjectTypeCheckpoint:
+		return true
+	default:
+		return false
+	}
+}
+
+// GenerateUniqueID generates a unique string ID for an object type based on existing objects.
+// The ID format is: <type>_<number> (e.g., "door_1", "platform_2", "checkpoint_1")
+func GenerateUniqueID(typ world.ObjectType, existingObjects []world.ObjectData) string {
+	// Determine the prefix based on object type
+	prefix := string(typ) + "_"
+
+	// Collect all existing IDs that match this prefix
+	existingIDs := make(map[string]bool)
+	for _, obj := range existingObjects {
+		if obj.Type == typ {
+			if id, ok := obj.Props["id"].(string); ok && id != "" {
+				existingIDs[id] = true
+			}
+		}
+	}
+
+	// Find the next available number
+	for i := 1; ; i++ {
+		candidateID := fmt.Sprintf("%s%d", prefix, i)
+		if !existingIDs[candidateID] {
+			return candidateID
+		}
+	}
+}
+
+// GenerateUniqueIDWithCustomPrefix generates a unique ID with a custom prefix.
+// This is useful for creating more semantic IDs like "gate_a" instead of "door_1".
+func GenerateUniqueIDWithCustomPrefix(prefix string, existingObjects []world.ObjectData) string {
+	// Collect all existing IDs
+	existingIDs := make(map[string]bool)
+	for _, obj := range existingObjects {
+		if id, ok := obj.Props["id"].(string); ok && id != "" {
+			existingIDs[id] = true
+		}
+	}
+
+	// Find the next available number
+	for i := 1; ; i++ {
+		candidateID := fmt.Sprintf("%s_%d", prefix, i)
+		if !existingIDs[candidateID] {
+			return candidateID
+		}
+	}
+}
+
+// CreateObjectWithAutoID creates an ObjectData with default values and an auto-generated unique ID.
+// This should be used when placing new objects that need IDs (doors, platforms, checkpoints).
+func CreateObjectWithAutoID(typ world.ObjectType, x, y float64, existingObjects []world.ObjectData) world.ObjectData {
+	obj := CreateDefaultObject(typ, x, y)
+
+	// Auto-generate ID for types that need it
+	if NeedsAutoID(typ) {
+		if obj.Props == nil {
+			obj.Props = make(map[string]any)
+		}
+		obj.Props["id"] = GenerateUniqueID(typ, existingObjects)
+	}
+
+	return obj
+}
+
+// GetAllExistingIDs returns all existing ID property values from objects.
+// Useful for validation and ID conflict detection.
+func GetAllExistingIDs(objects []world.ObjectData) []string {
+	var ids []string
+	for _, obj := range objects {
+		if id, ok := obj.Props["id"].(string); ok && id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// ValidateUniqueID checks if the given ID is unique among existing objects.
+// Returns true if the ID is unique, false if it conflicts.
+func ValidateUniqueID(id string, objects []world.ObjectData, excludeIndex int) bool {
+	for i, obj := range objects {
+		if i == excludeIndex {
+			continue
+		}
+		if existingID, ok := obj.Props["id"].(string); ok && existingID == id {
+			return false
+		}
+	}
+	return true
+}
+
+// GetIDPrefixForType returns the recommended ID prefix for an object type.
+// This can be used for generating semantic IDs.
+func GetIDPrefixForType(typ world.ObjectType) string {
+	switch typ {
+	case world.ObjectTypeDoor:
+		return "door"
+	case world.ObjectTypePlatform:
+		return "platform"
+	case world.ObjectTypeCheckpoint:
+		return "cp"
+	case world.ObjectTypeSwitch:
+		return "switch"
+	default:
+		return strings.ToLower(string(typ))
 	}
 }

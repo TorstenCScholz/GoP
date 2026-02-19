@@ -1,40 +1,32 @@
 // Package rules provides a data-driven rule system for entity interactions.
 package rules
 
-// Event represents a game event that can trigger rules.
-type Event struct {
-	// Type is the event type, e.g., "EnterRegion", "ExitRegion"
-	Type string
-	// Source is the entity ID that triggered the event
-	Source string
-	// Data contains additional event data
-	Data map[string]any
-}
+// EventType defines the type of game event.
+type EventType string
 
-// Common event types.
+// MVP event types.
 const (
 	// EventEnterRegion is emitted when a player enters a trigger region
-	EventEnterRegion = "EnterRegion"
+	EventEnterRegion EventType = "enter_region"
 	// EventExitRegion is emitted when a player exits a trigger region
-	EventExitRegion = "ExitRegion"
-	// EventDeath is emitted when the player dies
-	EventDeath = "Death"
-	// EventCheckpoint is emitted when a checkpoint is activated
-	EventCheckpoint = "Checkpoint"
-	// EventGoalReached is emitted when the player reaches the goal
-	EventGoalReached = "GoalReached"
-	// EventTimerExpired is emitted when a timer expires
-	EventTimerExpired = "TimerExpired"
+	EventExitRegion EventType = "exit_region"
 )
 
-// NewEvent creates a new event with optional data.
-func NewEvent(eventType, source string, data map[string]any) Event {
-	if data == nil {
-		data = make(map[string]any)
-	}
+// Event represents a game event that can trigger rules.
+type Event struct {
+	// Type is the event type
+	Type EventType
+	// RegionID is the region/trigger ID (e.g., "switch_A")
+	RegionID string
+	// ActorType is the actor type: "player", "enemy", etc. (MVP: only "player")
+	ActorType string
+}
+
+// NewEvent creates a new event with the given parameters.
+func NewEvent(typ EventType, regionID, actorType string) Event {
 	return Event{
-		Type:   eventType,
-		Source: source,
-		Data:   data,
+		Type:      typ,
+		RegionID:  regionID,
+		ActorType: actorType,
 	}
 }

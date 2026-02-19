@@ -1,23 +1,27 @@
-# Example rules for level_01
-# This demonstrates the rules system MVP
+# Rules for level_01
+# These rules define the switch→door relationships based on the level's entity configuration
 
 rules:
-  # Example: Switch toggle door (when switch with id "switch_1" is triggered)
-  # Note: This is an example - actual switch IDs depend on level data
-  # - id: switch_toggle_door
-  #   when:
-  #     event: EnterRegion
-  #     source: switch_1
-  #   actions:
-  #     - type: toggle
-  #       target: door_1
+  # Switch_Gate_A controls Door_Gate_A (gate_a)
+  # Located at x=208, this switch toggles the first gate
+  - id: switch_gate_a_controls_gate_a
+    when:
+      event: enter_region
+      region: Switch_Gate_A
+      actor: player
+    actions:
+      - type: toggle
+        target: gate_a
+    once: true
 
-  # Example: One-time secret door
-  # - id: secret_door_once
-  #   when:
-  #     event: EnterRegion
-  #     source: secret_trigger
-  #   actions:
-  #     - type: activate
-  #       target: secret_door
-  #   once: true
+  # Switch_Gate_B controls Door_Gate_B (gate_b)
+  # Located at x=944, this switch toggles the second gate
+  - id: switch_gate_b_controls_gate_b
+    when:
+      event: enter_region
+      region: Switch_Gate_B
+      actor: player
+    actions:
+      - type: toggle
+        target: gate_b
+    once: true

@@ -22,8 +22,8 @@ type ActionContext struct {
 	Event Event
 	// Resolver is used to look up target entities
 	Resolver TargetResolver
-	// Params contains action-specific parameters
-	Params map[string]any
+	// Logf is an optional logging function
+	Logf func(format string, args ...any)
 }
 
 // NewActionContext creates a new action context.
@@ -31,6 +31,5 @@ func NewActionContext(event Event, resolver TargetResolver) ActionContext {
 	return ActionContext{
 		Event:    event,
 		Resolver: resolver,
-		Params:   make(map[string]any),
 	}
 }

@@ -533,10 +533,10 @@ func (t *PlaceObjectTool) OnMouseDown(state *EditorState, tileX, tileY int, worl
 		return
 	}
 
-	// Create a new object with default properties
-	obj := CreateDefaultObject(objType, worldX, worldY)
+	// Create a new object with default properties and auto-generated ID
+	obj := CreateObjectWithAutoID(objType, worldX, worldY, state.Objects)
 
-	// Generate a unique ID for the object
+	// Generate a unique Tiled object ID for the object
 	obj.ID = t.generateObjectID(state)
 
 	// Get the index where the object will be added
@@ -546,7 +546,12 @@ func (t *PlaceObjectTool) OnMouseDown(state *EditorState, tileX, tileY int, worl
 	action := NewAddObjectAction(obj, index)
 	state.History.Do(action, state)
 
-	log.Printf("Placed %s at (%.0f, %.0f)", objType, worldX, worldY)
+	// Log the placement with ID info if applicable
+	if id, ok := obj.Props["id"].(string); ok && id != "" {
+		log.Printf("Placed %s with ID '%s' at (%.0f, %.0f)", objType, id, worldX, worldY)
+	} else {
+		log.Printf("Placed %s at (%.0f, %.0f)", objType, worldX, worldY)
+	}
 
 	// Deselect the object type in the palette
 	t.objectPalette.ClearSelection()

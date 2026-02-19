@@ -210,7 +210,7 @@ func (s *Scene) loadEntities() {
 	// Connect switches to rules engine
 	for _, sw := range switches {
 		sw.OnTrigger = func(switchID string) {
-			s.ruleEngine.ProcessEvent(rules.NewEvent(rules.EventEnterRegion, switchID, nil))
+			s.ruleEngine.ProcessEvent(rules.NewEvent(rules.EventEnterRegion, switchID, "player"))
 		}
 	}
 

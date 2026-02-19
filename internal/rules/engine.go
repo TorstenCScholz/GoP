@@ -66,7 +66,7 @@ func (e *Engine) ProcessEvent(event Event) {
 		}
 
 		// Execute actions
-		log.Printf("[rules] rule '%s' triggered by event '%s' from '%s'", rule.ID, event.Type, event.Source)
+		log.Printf("[rules] rule '%s' triggered by event '%s' from '%s' (actor: %s)", rule.ID, event.Type, event.RegionID, event.ActorType)
 		ExecuteActions(ctx, rule.Actions)
 
 		// Mark as fired if once rule
