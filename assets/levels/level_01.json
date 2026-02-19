@@ -4046,16 +4046,6 @@
           "name": "Platform_Bridge",
           "properties": [
             {
-              "name": "id",
-              "type": "string",
-              "value": "bridge1"
-            },
-            {
-              "name": "endX",
-              "type": "float",
-              "value": 272
-            },
-            {
               "name": "endY",
               "type": "float",
               "value": 0
@@ -4074,6 +4064,16 @@
               "name": "pushPlayer",
               "type": "bool",
               "value": true
+            },
+            {
+              "name": "id",
+              "type": "string",
+              "value": "bridge1"
+            },
+            {
+              "name": "endX",
+              "type": "float",
+              "value": 272
             }
           ],
           "type": "platform",
@@ -4156,7 +4156,7 @@
           "visible": true,
           "width": 32,
           "x": 320,
-          "y": 272
+          "y": 288
         },
         {
           "height": 64,
@@ -4164,21 +4164,21 @@
           "name": "Door_Gate_B",
           "properties": [
             {
-              "name": "id",
-              "type": "string",
-              "value": "gate_b"
-            },
-            {
               "name": "startOpen",
               "type": "bool",
               "value": false
+            },
+            {
+              "name": "id",
+              "type": "string",
+              "value": "gate_b"
             }
           ],
           "type": "door",
           "visible": true,
           "width": 32,
-          "x": 1056,
-          "y": 272
+          "x": 1072,
+          "y": 288
         },
         {
           "height": 16,
