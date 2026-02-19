@@ -17,8 +17,8 @@ type SpawnContext struct {
 }
 
 // SpawnEntities creates entities from object data and returns them.
-// Returns entities, triggers, solid entities, and kinematics separately for the caller to add to the world.
-func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Entity, []entities.Trigger, []entities.SolidEntity, []physics.Kinematic) {
+// Returns entities, triggers, solid entities, kinematics, and switches separately for the caller to add to the world.
+func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Entity, []entities.Trigger, []entities.SolidEntity, []physics.Kinematic, []*entities.Switch) {
 	var entityList []entities.Entity
 	var triggers []entities.Trigger
 	var solidEnts []entities.SolidEntity
@@ -54,7 +54,13 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 			if targetID == "" {
 				targetID = obj.GetPropString("door_id", "")
 			}
+			// Generate switch ID from name or object ID
+			switchID := obj.GetPropString("id", obj.Name)
+			if switchID == "" {
+				switchID = fmt.Sprintf("switch_%d", obj.ID)
+			}
 			sw := entities.NewSwitch(obj.X, obj.Y, obj.W, obj.H, targetID)
+			sw.SetID(switchID)
 			sw.SetToggleMode(obj.GetPropBool("toggle", true))
 			sw.SetOnce(obj.GetPropBool("once", false))
 			switches = append(switches, sw)
@@ -111,5 +117,5 @@ func SpawnEntities(objects []world.ObjectData, ctx SpawnContext) ([]entities.Ent
 		}
 	}
 
-	return entityList, triggers, solidEnts, kinematics
+	return entityList, triggers, solidEnts, kinematics, switches
 }

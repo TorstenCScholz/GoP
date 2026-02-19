@@ -1,0 +1,23 @@
+# Example rules for level_01
+# This demonstrates the rules system MVP
+
+rules:
+  # Example: Switch toggle door (when switch with id "switch_1" is triggered)
+  # Note: This is an example - actual switch IDs depend on level data
+  # - id: switch_toggle_door
+  #   when:
+  #     event: EnterRegion
+  #     source: switch_1
+  #   actions:
+  #     - type: toggle
+  #       target: door_1
+
+  # Example: One-time secret door
+  # - id: secret_door_once
+  #   when:
+  #     event: EnterRegion
+  #     source: secret_trigger
+  #   actions:
+  #     - type: activate
+  #       target: secret_door
+  #   once: true

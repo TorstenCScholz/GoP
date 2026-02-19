@@ -431,7 +431,7 @@ func (p *PlaytestController) loadEntitiesFromEditor(objects []world.ObjectData) 
 	}
 
 	// Spawn entities
-	_, triggers, solidEnts, kinematics := gameplay.SpawnEntities(objects, ctx)
+	_, triggers, solidEnts, kinematics, _ := gameplay.SpawnEntities(objects, ctx)
 
 	// Add entities to world
 	for _, t := range triggers {
@@ -467,7 +467,7 @@ func (p *PlaytestController) rebuildEntities() {
 	}
 
 	// Spawn entities
-	_, triggers, solidEnts, kinematics := gameplay.SpawnEntities(state.Objects, ctx)
+	_, triggers, solidEnts, kinematics, _ := gameplay.SpawnEntities(state.Objects, ctx)
 
 	for _, t := range triggers {
 		p.entityWorld.AddTrigger(t)

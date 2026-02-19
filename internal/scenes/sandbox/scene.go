@@ -17,6 +17,7 @@ import (
 	"github.com/torsten/GoP/internal/gfx"
 	"github.com/torsten/GoP/internal/input"
 	"github.com/torsten/GoP/internal/physics"
+	"github.com/torsten/GoP/internal/rules"
 	timestep "github.com/torsten/GoP/internal/time"
 	"github.com/torsten/GoP/internal/world"
 )
@@ -85,6 +86,9 @@ type Scene struct {
 
 	// Debug text
 	debugText string
+
+	// Rules engine for data-driven entity interactions
+	ruleEngine *rules.Engine
 }
 
 // New creates a new sandbox scene.
@@ -186,7 +190,7 @@ func (s *Scene) loadEntities() {
 	}
 
 	// Spawn entities
-	_, triggers, solidEnts, kinematics := gameplay.SpawnEntities(objects, ctx)
+	_, triggers, solidEnts, kinematics, switches := gameplay.SpawnEntities(objects, ctx)
 
 	// Add entities to world
 	for _, t := range triggers {
@@ -198,6 +202,33 @@ func (s *Scene) loadEntities() {
 	for _, k := range kinematics {
 		s.entityWorld.AddKinematic(k)
 	}
+
+	// Initialize rules engine with target registry
+	resolver := newTargetResolver(s.entityWorld.TargetRegistry)
+	s.ruleEngine = rules.NewEngine(resolver)
+
+	// Connect switches to rules engine
+	for _, sw := range switches {
+		sw.OnTrigger = func(switchID string) {
+			s.ruleEngine.ProcessEvent(rules.NewEvent(rules.EventEnterRegion, switchID, nil))
+		}
+	}
+
+	// Load rules from level data (if embedded in properties)
+	// TODO: Load from separate file or embedded level data
+	// For now, we'll add example rules programmatically for testing
+	s.loadRules()
+}
+
+// loadRules loads rules for the current level.
+// In the future, this will load from embedded level data or separate YAML files.
+func (s *Scene) loadRules() {
+	// Example: Load rules from a YAML file if it exists
+	// For MVP, rules can be embedded in level JSON properties or loaded separately
+	// ruleData, err := assets.LoadRules("level_01_rules.yaml")
+	// if err == nil {
+	//     s.ruleEngine.LoadYAML(ruleData)
+	// }
 }
 
 // initSprite loads the spritesheet and creates the sprite animation.

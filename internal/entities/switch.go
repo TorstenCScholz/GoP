@@ -14,6 +14,7 @@ import (
 type Switch struct {
 	bounds     physics.AABB
 	state      TriggerState
+	id         string // Unique identifier for this switch
 	targetID   string
 	toggleMode bool // true = toggle, false = one-shot open
 	once       bool // true = deactivate after use
@@ -21,6 +22,11 @@ type Switch struct {
 
 	// Registry for resolving targets at runtime
 	registry *TargetRegistry
+
+	// Event callback for rules system (optional)
+	// This is called when the switch is triggered, allowing external systems
+	// to handle the event (e.g., the rules engine)
+	OnTrigger func(switchID string)
 }
 
 // NewSwitch creates a new switch at the given position.
@@ -47,6 +53,16 @@ func (s *Switch) SetOnce(once bool) {
 // SetRegistry sets the target registry for resolving targets at runtime.
 func (s *Switch) SetRegistry(registry *TargetRegistry) {
 	s.registry = registry
+}
+
+// SetID sets the unique identifier for this switch.
+func (s *Switch) SetID(id string) {
+	s.id = id
+}
+
+// GetID returns the unique identifier for this switch.
+func (s *Switch) GetID() string {
+	return s.id
 }
 
 // GetTargetID returns the target ID for this switch.
@@ -127,7 +143,12 @@ func (s *Switch) OnEnter(player *physics.Body) {
 		return
 	}
 
-	// Resolve target from registry
+	// Notify event callback if set (for rules system)
+	if s.OnTrigger != nil {
+		s.OnTrigger(s.id)
+	}
+
+	// Legacy behavior: resolve target from registry
 	if s.registry == nil {
 		return
 	}
