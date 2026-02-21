@@ -553,11 +553,11 @@ func (t *PlaceObjectTool) OnMouseDown(state *EditorState, tileX, tileY int, worl
 		log.Printf("Placed %s at (%.0f, %.0f)", objType, worldX, worldY)
 	}
 
-	// Deselect the object type in the palette
-	t.objectPalette.ClearSelection()
-
-	// Switch back to Select tool
-	state.SetTool(ToolSelect)
+	// Stay in Place Object mode if Shift is held (for placing multiple objects)
+	if !ebiten.IsKeyPressed(ebiten.KeyShift) {
+		t.objectPalette.ClearSelection()
+		state.SetTool(ToolSelect)
+	}
 }
 
 // OnMouseMove does nothing for place object tool.
@@ -615,6 +615,14 @@ func (tm *ToolManager) SetState(state *EditorState) {
 // SelectTool returns the select tool for external access.
 func (tm *ToolManager) SelectTool() *SelectTool {
 	return tm.selectTool
+}
+
+// GetPlaceObjectType returns the currently selected object type from the palette.
+func (tm *ToolManager) GetPlaceObjectType() world.ObjectType {
+	if tm.placeObjectTool != nil && tm.placeObjectTool.objectPalette != nil {
+		return tm.placeObjectTool.objectPalette.SelectedType()
+	}
+	return ""
 }
 
 // GetTool returns the tool handler for the given tool type.

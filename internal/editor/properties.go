@@ -46,8 +46,10 @@ type PropertiesPanel struct {
 	editingIndex      int                   // Index of property being edited
 	editingBuffer     string                // Text buffer for editing
 	editingProp       string                // Name of property being edited
+	editingBuiltIn    string                // Name of built-in property being edited ("X", "Y", "Width", "Height", or "")
 	scrollOffset      int                   // Scroll offset for long property lists
 	hoveredRow        int                   // Index of hovered property row (-1 if none)
+	hoveredBuiltInRow int                   // Index of hovered built-in row (-1 if none)
 	validation        *ValidationResult     // Current validation result
 	linkButtonHovered bool                  // True if the "Link to Door" button is hovered
 	OnStartLinkMode   func(switchIndex int) // Callback when link mode is requested
@@ -56,10 +58,11 @@ type PropertiesPanel struct {
 // NewPropertiesPanel creates a new properties panel.
 func NewPropertiesPanel(state *EditorState) *PropertiesPanel {
 	return &PropertiesPanel{
-		state:        state,
-		editorState:  PropertyEditorIdle,
-		editingIndex: -1,
-		hoveredRow:   -1,
+		state:             state,
+		editorState:       PropertyEditorIdle,
+		editingIndex:      -1,
+		hoveredRow:        -1,
+		hoveredBuiltInRow: -1,
 	}
 }
 
@@ -117,10 +120,10 @@ func (p *PropertiesPanel) Draw(screen *ebiten.Image, startY int) {
 
 	// Draw built-in properties (X, Y, Width, Height)
 	propY := headerY + PropertyRowHeight + 5
-	propY = p.drawBuiltInProperty(screen, panelX, propY, "X", obj.X)
-	propY = p.drawBuiltInProperty(screen, panelX, propY, "Y", obj.Y)
-	propY = p.drawBuiltInProperty(screen, panelX, propY, "Width", obj.W)
-	propY = p.drawBuiltInProperty(screen, panelX, propY, "Height", obj.H)
+	propY = p.drawBuiltInProperty(screen, panelX, propY, "X", obj.X, 0)
+	propY = p.drawBuiltInProperty(screen, panelX, propY, "Y", obj.Y, 1)
+	propY = p.drawBuiltInProperty(screen, panelX, propY, "Width", obj.W, 2)
+	propY = p.drawBuiltInProperty(screen, panelX, propY, "Height", obj.H, 3)
 
 	// Draw separator
 	sepY := propY + 5
@@ -148,16 +151,40 @@ func (p *PropertiesPanel) Draw(screen *ebiten.Image, startY int) {
 }
 
 // drawBuiltInProperty draws a built-in property row (X, Y, Width, Height).
-func (p *PropertiesPanel) drawBuiltInProperty(screen *ebiten.Image, panelX, y int, name string, value float64) int {
+func (p *PropertiesPanel) drawBuiltInProperty(screen *ebiten.Image, panelX, y int, name string, value float64, rowIndex int) int {
 	labelX := panelX + PropertyPadding
 	valueX := panelX + PropertyPadding + PropertyLabelWidth
+	valueWidth := ObjectPaletteWidth - 2*PropertyPadding - PropertyLabelWidth
 
 	// Draw label
 	ebitenutil.DebugPrintAt(screen, name+":", labelX, y)
 
-	// Draw value
-	valueText := fmt.Sprintf("%.0f", value)
-	ebitenutil.DebugPrintAt(screen, valueText, valueX, y)
+	// Check if this row is being edited
+	if p.editorState == PropertyEditorActive && p.editingBuiltIn == name {
+		// Draw input field background
+		inputBg := ebiten.NewImage(valueWidth, PropertyRowHeight-4)
+		inputBg.Fill(propertyInputBgColor)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(valueX), float64(y))
+		screen.DrawImage(inputBg, op)
+
+		// Draw editing buffer with cursor
+		displayText := p.editingBuffer + "|"
+		ebitenutil.DebugPrintAt(screen, displayText, valueX+2, y)
+	} else {
+		// Check if hovered
+		if p.hoveredBuiltInRow == rowIndex {
+			hoverBg := ebiten.NewImage(valueWidth, PropertyRowHeight-4)
+			hoverBg.Fill(propertyHoverColor)
+			op := &ebiten.DrawImageOptions{}
+			op.GeoM.Translate(float64(valueX), float64(y))
+			screen.DrawImage(hoverBg, op)
+		}
+
+		// Draw value
+		valueText := fmt.Sprintf("%.0f", value)
+		ebitenutil.DebugPrintAt(screen, valueText, valueX, y)
+	}
 
 	return y + PropertyRowHeight
 }
@@ -362,6 +389,28 @@ func (p *PropertiesPanel) startEdit(obj *world.ObjectData, propSchema PropertySc
 	}
 }
 
+// startBuiltInEdit begins editing a built-in property (X, Y, Width, Height).
+func (p *PropertiesPanel) startBuiltInEdit(obj *world.ObjectData, name string) {
+	p.editorState = PropertyEditorActive
+	p.editingBuiltIn = name
+	p.editingProp = ""
+	p.editingIndex = -1
+
+	// Get current value
+	var value float64
+	switch name {
+	case "X":
+		value = obj.X
+	case "Y":
+		value = obj.Y
+	case "Width":
+		value = obj.W
+	case "Height":
+		value = obj.H
+	}
+	p.editingBuffer = fmt.Sprintf("%.0f", value)
+}
+
 // confirmEdit applies the edited value to the object.
 func (p *PropertiesPanel) confirmEdit() {
 	if p.editorState != PropertyEditorActive {
@@ -371,6 +420,12 @@ func (p *PropertiesPanel) confirmEdit() {
 	obj := p.state.GetSelectedObject()
 	if obj == nil {
 		p.cancelEdit()
+		return
+	}
+
+	// Handle built-in property editing
+	if p.editingBuiltIn != "" {
+		p.confirmBuiltInEdit(obj)
 		return
 	}
 
@@ -434,11 +489,52 @@ func (p *PropertiesPanel) confirmEdit() {
 	p.editingBuffer = ""
 }
 
+// confirmBuiltInEdit applies the edited value for a built-in property.
+func (p *PropertiesPanel) confirmBuiltInEdit(obj *world.ObjectData) {
+	floatVal, err := strconv.ParseFloat(strings.TrimSpace(p.editingBuffer), 64)
+	if err != nil {
+		p.cancelEdit()
+		return
+	}
+
+	idx := p.state.SelectedObject
+
+	switch p.editingBuiltIn {
+	case "X":
+		if floatVal != obj.X {
+			action := NewMoveObjectAction(idx, obj.X, obj.Y, floatVal, obj.Y)
+			p.state.History.Do(action, p.state)
+		}
+	case "Y":
+		if floatVal != obj.Y {
+			action := NewMoveObjectAction(idx, obj.X, obj.Y, obj.X, floatVal)
+			p.state.History.Do(action, p.state)
+		}
+	case "Width":
+		if floatVal > 0 && floatVal != obj.W {
+			action := NewResizeObjectAction(idx, obj.W, obj.H, floatVal, obj.H)
+			p.state.History.Do(action, p.state)
+		}
+	case "Height":
+		if floatVal > 0 && floatVal != obj.H {
+			action := NewResizeObjectAction(idx, obj.W, obj.H, obj.W, floatVal)
+			p.state.History.Do(action, p.state)
+		}
+	}
+
+	p.editorState = PropertyEditorIdle
+	p.editingBuiltIn = ""
+	p.editingIndex = -1
+	p.editingProp = ""
+	p.editingBuffer = ""
+}
+
 // cancelEdit cancels the current edit operation.
 func (p *PropertiesPanel) cancelEdit() {
 	p.editorState = PropertyEditorIdle
 	p.editingIndex = -1
 	p.editingProp = ""
+	p.editingBuiltIn = ""
 	p.editingBuffer = ""
 }
 
@@ -460,28 +556,55 @@ func (p *PropertiesPanel) toggleBoolProperty(obj *world.ObjectData, propSchema P
 	p.state.History.Do(action, p.state)
 }
 
-// moveToNextProperty moves editing to the next property in the schema.
+// moveToNextProperty moves editing to the next property.
+// Cycles: X → Y → Width → Height → first custom property → ... → X
 func (p *PropertiesPanel) moveToNextProperty() {
 	obj := p.state.GetSelectedObject()
 	if obj == nil {
 		return
 	}
 
+	builtInNames := []string{"X", "Y", "Width", "Height"}
+
 	schema := GetSchema(obj.Type)
+
+	// If we were editing a built-in property, move to the next one
+	if p.editingBuiltIn != "" {
+		for i, name := range builtInNames {
+			if name == p.editingBuiltIn {
+				nextIdx := i + 1
+				if nextIdx < len(builtInNames) {
+					// Move to next built-in
+					p.startBuiltInEdit(obj, builtInNames[nextIdx])
+					return
+				}
+				// Past last built-in — move to first custom property
+				if schema != nil && len(schema.Properties) > 0 {
+					p.startEdit(obj, schema.Properties[0], 0)
+					return
+				}
+				// No custom properties, wrap to first built-in
+				p.startBuiltInEdit(obj, builtInNames[0])
+				return
+			}
+		}
+	}
+
+	// We were editing a custom property
 	if schema == nil || len(schema.Properties) == 0 {
+		// No custom properties, wrap to first built-in
+		p.startBuiltInEdit(obj, builtInNames[0])
 		return
 	}
 
-	// Find next property index
 	nextIndex := p.editingIndex + 1
 	if nextIndex >= len(schema.Properties) {
-		nextIndex = 0 // Wrap around
+		// Wrap to first built-in
+		p.startBuiltInEdit(obj, builtInNames[0])
+		return
 	}
 
-	// Start editing the next property
-	if nextIndex < len(schema.Properties) {
-		p.startEdit(obj, schema.Properties[nextIndex], nextIndex)
-	}
+	p.startEdit(obj, schema.Properties[nextIndex], nextIndex)
 }
 
 // HandleClick processes mouse clicks in the properties panel.
@@ -518,10 +641,22 @@ func (p *PropertiesPanel) HandleClick(screenX, screenY, screenWidth, startY int)
 	// Calculate property row positions
 	titleY := startY + PropertyPadding
 	headerY := titleY + 20
-	propY := headerY + PropertyRowHeight + 5
+	builtInStartY := headerY + PropertyRowHeight + 5
 
-	// Skip built-in properties (X, Y, Width, Height) - 4 rows
-	propY += 4 * PropertyRowHeight
+	// Check built-in property clicks (X, Y, Width, Height)
+	valueX := panelX + PropertyPadding + PropertyLabelWidth
+	builtInNames := []string{"X", "Y", "Width", "Height"}
+	for i, name := range builtInNames {
+		rowTop := builtInStartY + i*PropertyRowHeight
+		if screenY >= rowTop && screenY < rowTop+PropertyRowHeight {
+			if screenX >= valueX {
+				p.startBuiltInEdit(obj, name)
+			}
+			return true
+		}
+	}
+
+	propY := builtInStartY + 4*PropertyRowHeight
 
 	// Skip separator
 	propY += 15
@@ -567,6 +702,7 @@ func (p *PropertiesPanel) HandleClick(screenX, screenY, screenWidth, startY int)
 // HandleMouseMove processes mouse movement for hover effects.
 func (p *PropertiesPanel) HandleMouseMove(screenX, screenY, screenWidth, startY int) {
 	p.hoveredRow = -1
+	p.hoveredBuiltInRow = -1
 	p.linkButtonHovered = false
 
 	// Check if mouse is in properties panel area
@@ -595,10 +731,21 @@ func (p *PropertiesPanel) HandleMouseMove(screenX, screenY, screenWidth, startY 
 	// Calculate property row positions
 	titleY := startY + PropertyPadding
 	headerY := titleY + 20
-	propY := headerY + PropertyRowHeight + 5
+	builtInStartY := headerY + PropertyRowHeight + 5
 
-	// Skip built-in properties (X, Y, Width, Height) - 4 rows
-	propY += 4 * PropertyRowHeight
+	// Check built-in property rows
+	valueX := panelX + PropertyPadding + PropertyLabelWidth
+	for i := 0; i < 4; i++ {
+		rowTop := builtInStartY + i*PropertyRowHeight
+		if screenY >= rowTop && screenY < rowTop+PropertyRowHeight {
+			if screenX >= valueX {
+				p.hoveredBuiltInRow = i
+			}
+			return
+		}
+	}
+
+	propY := builtInStartY + 4*PropertyRowHeight
 
 	// Skip separator
 	propY += 15
@@ -636,7 +783,7 @@ func (p *PropertiesPanel) HandleMouseMove(screenX, screenY, screenWidth, startY 
 
 // IsEditing returns true if a property is currently being edited.
 func (p *PropertiesPanel) IsEditing() bool {
-	return p.editorState == PropertyEditorActive
+	return p.editorState == PropertyEditorActive || p.editingBuiltIn != ""
 }
 
 // IsInPanel returns true if the given screen coordinates are within the properties panel area.

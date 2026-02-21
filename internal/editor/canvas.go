@@ -3,6 +3,7 @@ package editor
 import (
 	"fmt"
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -23,6 +24,12 @@ type Canvas struct {
 	validation    *ValidationResult // Current validation result
 	hoveredTileX  int               // Currently hovered tile X coordinate
 	hoveredTileY  int               // Currently hovered tile Y coordinate
+	screenWidth   int               // Current screen width (set from App.Layout)
+	screenHeight  int               // Current screen height (set from App.Layout)
+	cachedPixel       *ebiten.Image // 1x1 pixel for grid lines
+	cachedOverlayTile *ebiten.Image // tileW x tileH for collision overlay
+	cachedOverlayW    int           // cached overlay width for invalidation
+	cachedOverlayH    int           // cached overlay height for invalidation
 }
 
 // NewCanvas creates a new canvas for rendering the tilemap.
@@ -38,10 +45,17 @@ func NewCanvas(state *EditorState, camera *Camera, tileset *Tileset) *Canvas {
 		validation:    nil,
 		hoveredTileX:  -1,
 		hoveredTileY:  -1,
+		cachedPixel:   ebiten.NewImage(1, 1),
 	}
 	// Set the state reference for tools that need it
 	c.tools.SetState(state)
 	return c
+}
+
+// SetScreenSize updates the stored screen dimensions.
+func (c *Canvas) SetScreenSize(w, h int) {
+	c.screenWidth = w
+	c.screenHeight = h
 }
 
 // Draw renders the tilemap canvas to the screen.
@@ -77,6 +91,9 @@ func (c *Canvas) Draw(screen *ebiten.Image) {
 
 	// Draw tool preview
 	c.drawToolPreview(screen, canvasWidth)
+
+	// Draw object placement ghost preview
+	c.drawObjectPlacementPreview(screen, canvasWidth)
 
 	// Draw link mode visual feedback
 	if c.state.IsInLinkMode() {
@@ -205,9 +222,13 @@ func (c *Canvas) drawCollisionOverlay(screen *ebiten.Image, canvasWidth int) {
 		ty2 = c.state.MapData.Height()
 	}
 
-	// Create collision overlay tile
-	overlayTile := ebiten.NewImage(tileW, tileH)
-	overlayTile.Fill(collisionOverlayColor)
+	// Use cached collision overlay tile (recreate if tile size changed)
+	if c.cachedOverlayTile == nil || c.cachedOverlayW != tileW || c.cachedOverlayH != tileH {
+		c.cachedOverlayTile = ebiten.NewImage(tileW, tileH)
+		c.cachedOverlayW = tileW
+		c.cachedOverlayH = tileH
+	}
+	c.cachedOverlayTile.Fill(collisionOverlayColor)
 
 	for ty := ty1; ty < ty2; ty++ {
 		for tx := tx1; tx < tx2; tx++ {
@@ -226,7 +247,7 @@ func (c *Canvas) drawCollisionOverlay(screen *ebiten.Image, canvasWidth int) {
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(zoom, zoom)
 			op.GeoM.Translate(screenX, screenY)
-			screen.DrawImage(overlayTile, op)
+			screen.DrawImage(c.cachedOverlayTile, op)
 		}
 	}
 }
@@ -445,7 +466,7 @@ func (c *Canvas) drawDashedLine(screen *ebiten.Image, x1, y1, x2, y2 float64, co
 	// Calculate line length and direction
 	dx := x2 - x1
 	dy := y2 - y1
-	length := sqrt(dx*dx + dy*dy)
+	length := math.Sqrt(dx*dx + dy*dy)
 
 	if length == 0 {
 		return
@@ -479,19 +500,6 @@ func (c *Canvas) drawDashedLine(screen *ebiten.Image, x1, y1, x2, y2 float64, co
 		// Move to next dash
 		pos += dashLength + gapLength
 	}
-}
-
-// sqrt returns the square root of a float64.
-func sqrt(x float64) float64 {
-	if x < 0 {
-		return 0
-	}
-	// Simple Newton's method for square root
-	z := x
-	for i := 0; i < 10; i++ {
-		z = z - (z*z-x)/(2*z)
-	}
-	return z
 }
 
 // drawSwitchDoorLinks draws connection lines between switches and their target doors.
@@ -706,9 +714,8 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 		endTileY = mapHeight
 	}
 
-	// Create grid line image
-	gridLine := ebiten.NewImage(1, 1)
-	gridLine.Fill(gridColor)
+	// Use cached 1x1 pixel for grid lines
+	c.cachedPixel.Fill(gridColor)
 
 	// Calculate the screen position of the map boundaries
 	mapRightWorld := float64(mapWidth * tileW)
@@ -749,7 +756,7 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(1, lineHeight)
 			op.GeoM.Translate(screenX, lineTop)
-			screen.DrawImage(gridLine, op)
+			screen.DrawImage(c.cachedPixel, op)
 		}
 	}
 
@@ -784,7 +791,7 @@ func (c *Canvas) drawGrid(screen *ebiten.Image, canvasWidth, screenHeight int) {
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(lineWidth, 1)
 			op.GeoM.Translate(lineLeft, screenY)
-			screen.DrawImage(gridLine, op)
+			screen.DrawImage(c.cachedPixel, op)
 		}
 	}
 }
@@ -862,6 +869,71 @@ func (c *Canvas) drawToolPreview(screen *ebiten.Image, canvasWidth int) {
 	}
 }
 
+// drawObjectPlacementPreview draws a ghost preview of the object about to be placed.
+func (c *Canvas) drawObjectPlacementPreview(screen *ebiten.Image, canvasWidth int) {
+	if c.state.CurrentTool != ToolPlaceObject {
+		return
+	}
+
+	objType := c.tools.GetPlaceObjectType()
+	if objType == "" {
+		return
+	}
+
+	// Get cursor position
+	mx, my := ebiten.CursorPosition()
+	if mx >= canvasWidth || mx < 0 {
+		return
+	}
+
+	// Convert to world coordinates
+	worldX, worldY := c.camera.ScreenToWorld(mx, my)
+
+	// Snap to grid
+	gridSize := 16
+	if c.state.MapData != nil {
+		gridSize = c.state.MapData.TileWidth()
+	}
+	worldX = float64(int(worldX/float64(gridSize))) * float64(gridSize)
+	worldY = float64(int(worldY/float64(gridSize))) * float64(gridSize)
+
+	// Get schema for size and color
+	schema := GetSchema(objType)
+	if schema == nil {
+		return
+	}
+
+	w := schema.DefaultW
+	h := schema.DefaultH
+	objColor := parseColor(schema.Color)
+
+	// Convert to screen coordinates
+	screenX := (worldX - c.camera.X) * c.camera.Zoom
+	screenY := (worldY - c.camera.Y) * c.camera.Zoom
+	sw := w * c.camera.Zoom
+	sh := h * c.camera.Zoom
+
+	// Draw semi-transparent fill
+	ghostColor := color.RGBA{objColor.R, objColor.G, objColor.B, 100}
+	ghostImg := ebiten.NewImage(int(sw), int(sh))
+	ghostImg.Fill(ghostColor)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(screenX, screenY)
+	screen.DrawImage(ghostImg, op)
+
+	// Draw border
+	borderColor := color.RGBA{objColor.R, objColor.G, objColor.B, 180}
+	ebitenutil.DrawRect(screen, screenX, screenY, sw, 2, borderColor)
+	ebitenutil.DrawRect(screen, screenX, screenY+sh-2, sw, 2, borderColor)
+	ebitenutil.DrawRect(screen, screenX, screenY, 2, sh, borderColor)
+	ebitenutil.DrawRect(screen, screenX+sw-2, screenY, 2, sh, borderColor)
+
+	// Draw type label
+	if c.camera.Zoom >= 0.5 {
+		ebitenutil.DebugPrintAt(screen, schema.Name, int(screenX)+4, int(screenY)+4)
+	}
+}
+
 // drawLinkModeFeedback draws visual feedback during link mode.
 func (c *Canvas) drawLinkModeFeedback(screen *ebiten.Image, canvasWidth int) {
 	switchIndex := c.state.GetLinkSource()
@@ -913,14 +985,17 @@ func (c *Canvas) drawLinkModeFeedback(screen *ebiten.Image, canvasWidth int) {
 
 // Update handles input for the canvas.
 func (c *Canvas) Update() error {
-	// Toggle grid with G key
-	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
-		c.showGrid = !c.showGrid
-	}
+	// Don't process single-key shortcuts while editing properties
+	if c.state == nil || !c.state.IsEditingProperty {
+		// Toggle grid with G key
+		if inpututil.IsKeyJustPressed(ebiten.KeyG) {
+			c.showGrid = !c.showGrid
+		}
 
-	// Toggle collision overlay with C key
-	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
-		c.showCollision = !c.showCollision
+		// Toggle collision overlay with C key
+		if inpututil.IsKeyJustPressed(ebiten.KeyC) {
+			c.showCollision = !c.showCollision
+		}
 	}
 
 	// Handle tool input
@@ -944,7 +1019,10 @@ func (c *Canvas) handleToolInput() {
 	mx, my := ebiten.CursorPosition()
 
 	// Check if cursor is in canvas area (not in palette)
-	screenWidth := 1280 // Default, will be overridden by actual screen size
+	screenWidth := c.screenWidth
+	if screenWidth == 0 {
+		screenWidth = 1280
+	}
 	if c.state.Zoom > 0 {
 		// Approximate canvas width check (account for both palettes)
 		canvasWidth := screenWidth - PaletteWidth - ObjectPaletteWidth

@@ -66,6 +66,9 @@ type EditorState struct {
 	LinkMode     bool
 	LinkSourceID int // Index of the switch object being linked
 
+	// Property editing state (set from PropertiesPanel)
+	IsEditingProperty bool
+
 	// Endpoint dragging for platforms
 	IsDraggingEndpoint bool    // True when dragging a platform endpoint handle
 	DraggingObjectIdx  int     // Index of the platform being edited

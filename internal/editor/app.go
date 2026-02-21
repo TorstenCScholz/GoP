@@ -10,6 +10,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// ConfirmDialog represents a modal confirmation dialog.
+type ConfirmDialog struct {
+	Message   string
+	OnConfirm func()
+}
+
 // App implements ebiten.Game interface for the level editor.
 type App struct {
 	state           *EditorState
@@ -25,6 +31,7 @@ type App struct {
 	clipboard       *Clipboard          // Clipboard for copy/paste
 	showHelp        bool                // Show keyboard shortcuts overlay
 	minimap         *Minimap            // Minimap component
+	confirmDialog   *ConfirmDialog      // Active confirmation dialog (nil when none)
 }
 
 // NewApp creates a new editor application.
@@ -87,8 +94,21 @@ func (a *App) Update() error {
 		return a.playtest.Update()
 	}
 
+	// Handle confirmation dialog input (blocks all other input)
+	if a.confirmDialog != nil {
+		if inpututil.IsKeyJustPressed(ebiten.KeyY) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+			if a.confirmDialog.OnConfirm != nil {
+				a.confirmDialog.OnConfirm()
+			}
+			a.confirmDialog = nil
+		} else if inpututil.IsKeyJustPressed(ebiten.KeyN) || inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			a.confirmDialog = nil
+		}
+		return nil
+	}
+
 	// Handle playtest mode toggle (P key)
-	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) && !a.propertiesPanel.IsEditing() {
 		if !ebiten.IsKeyPressed(ebiten.KeyControl) {
 			if err := a.playtest.StartPlaytest(); err != nil {
 				log.Printf("Failed to start playtest: %v", err)
@@ -120,8 +140,15 @@ func (a *App) Update() error {
 	a.state.CameraY = a.camera.Y
 	a.state.Zoom = a.camera.Zoom
 
-	// Update canvas (handles grid/collision toggle, tool input, etc.)
+	// Sync property editing state so canvas can guard its shortcuts
+	a.state.IsEditingProperty = a.propertiesPanel.IsEditing()
+
+	// Update canvas with current screen size (handles grid/collision toggle, tool input, etc.)
+	a.canvas.SetScreenSize(a.screenWidth, a.screenHeight)
 	a.canvas.Update()
+
+	// Update cursor shape based on hover state and tool
+	a.updateCursorShape()
 
 	// Handle tile selection from palette
 	a.handlePaletteInput()
@@ -359,6 +386,11 @@ func (a *App) handleToolShortcuts() {
 		return
 	}
 
+	// Don't process single-key shortcuts while editing properties
+	if a.propertiesPanel.IsEditing() {
+		return
+	}
+
 	// Tool selection shortcuts
 	// 1 or S - Select tool
 	if inpututil.IsKeyJustPressed(ebiten.Key1) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
@@ -514,10 +546,39 @@ func (a *App) handleToolShortcuts() {
 
 // handleValidationShortcuts processes keyboard shortcuts for validation.
 func (a *App) handleValidationShortcuts() {
+	// Don't process single-key shortcuts while editing properties
+	if a.propertiesPanel.IsEditing() {
+		return
+	}
+
 	// V - Run validation
 	if inpututil.IsKeyJustPressed(ebiten.KeyV) {
 		if !ebiten.IsKeyPressed(ebiten.KeyControl) {
 			a.runValidation()
+		}
+	}
+}
+
+// updateCursorShape sets the mouse cursor shape based on hover state and current tool.
+func (a *App) updateCursorShape() {
+	handle := a.canvas.HoverHandle()
+	switch handle {
+	case HandleTopLeft, HandleBottomRight:
+		ebiten.SetCursorShape(ebiten.CursorShapeNWSEResize)
+	case HandleTopRight, HandleBottomLeft:
+		ebiten.SetCursorShape(ebiten.CursorShapeNESWResize)
+	case HandleTop, HandleBottom:
+		ebiten.SetCursorShape(ebiten.CursorShapeNSResize)
+	case HandleLeft, HandleRight:
+		ebiten.SetCursorShape(ebiten.CursorShapeEWResize)
+	case HandlePlatformEndpoint:
+		ebiten.SetCursorShape(ebiten.CursorShapeCrosshair)
+	default:
+		switch a.state.CurrentTool {
+		case ToolPaint, ToolFill, ToolErase:
+			ebiten.SetCursorShape(ebiten.CursorShapeCrosshair)
+		default:
+			ebiten.SetCursorShape(ebiten.CursorShapeDefault)
 		}
 	}
 }
@@ -544,17 +605,32 @@ func (a *App) runValidation() {
 	log.Printf("Validation complete: %d errors, %d warnings", a.validation.ErrorCount(), a.validation.WarningCount())
 }
 
-// newLevel creates a new empty level.
+// showConfirmDialog displays a confirmation dialog that blocks all other input.
+func (a *App) showConfirmDialog(message string, onConfirm func()) {
+	a.confirmDialog = &ConfirmDialog{
+		Message:   message,
+		OnConfirm: onConfirm,
+	}
+}
+
+// newLevel creates a new empty level, prompting if there are unsaved changes.
 func (a *App) newLevel() {
-	// TODO: Check for unsaved changes and prompt user
+	if a.state.IsModified() {
+		a.showConfirmDialog("Unsaved changes will be lost. Continue?", func() {
+			a.doNewLevel()
+		})
+		return
+	}
+	a.doNewLevel()
+}
+
+// doNewLevel performs the actual new level creation.
+func (a *App) doNewLevel() {
 	a.state = NewLevel(DefaultLevelWidth, DefaultLevelHeight)
 	a.camera.Reset()
-	// Recreate canvas with new state
 	a.canvas = NewCanvas(a.state, a.camera, a.tileset)
 	a.canvas.tools.SetObjectPalette(a.objectPalette)
-	// Update properties panel with new state
 	a.propertiesPanel.SetState(a.state)
-	// Re-set the link mode callback
 	a.propertiesPanel.OnStartLinkMode = func(switchIndex int) {
 		a.state.StartLinkMode(switchIndex)
 		a.state.ShowStatusMessage("Click on a door to link, or press Escape to cancel", false)
@@ -563,11 +639,19 @@ func (a *App) newLevel() {
 	log.Println("Created new level")
 }
 
-// openLevel opens an existing level file.
+// openLevel opens an existing level file, prompting if there are unsaved changes.
 func (a *App) openLevel() {
-	// TODO: Check for unsaved changes and prompt user
+	if a.state.IsModified() {
+		a.showConfirmDialog("Unsaved changes will be lost. Continue?", func() {
+			a.doOpenLevel()
+		})
+		return
+	}
+	a.doOpenLevel()
+}
 
-	// Use the current file path if set, otherwise use default
+// doOpenLevel performs the actual level opening.
+func (a *App) doOpenLevel() {
 	path := a.state.FilePath
 	if path == "" {
 		path = DefaultLevelPath
@@ -582,12 +666,9 @@ func (a *App) openLevel() {
 
 	a.state = state
 	a.camera.Reset()
-	// Recreate canvas with new state
 	a.canvas = NewCanvas(a.state, a.camera, a.tileset)
 	a.canvas.tools.SetObjectPalette(a.objectPalette)
-	// Update properties panel with new state
 	a.propertiesPanel.SetState(a.state)
-	// Re-set the link mode callback
 	a.propertiesPanel.OnStartLinkMode = func(switchIndex int) {
 		a.state.StartLinkMode(switchIndex)
 		a.state.ShowStatusMessage("Click on a door to link, or press Escape to cancel", false)
@@ -698,6 +779,12 @@ func (a *App) Draw(screen *ebiten.Image) {
 	a.propertiesPanel.SetValidation(a.validation)
 	a.propertiesPanel.Draw(screen, propertiesStartY)
 
+	// Draw separator lines between canvas and palettes
+	separatorColor := color.RGBA{70, 70, 90, 255}
+	ebitenutil.DrawRect(screen, float64(tilePaletteX), 0, 2, float64(screenHeight), separatorColor)
+	objPaletteX := screenWidth - ObjectPaletteWidth
+	ebitenutil.DrawRect(screen, float64(objPaletteX), 0, 2, float64(screenHeight), separatorColor)
+
 	// Draw minimap
 	a.drawMinimap(screen)
 
@@ -710,6 +797,11 @@ func (a *App) Draw(screen *ebiten.Image) {
 	// Draw help overlay if visible
 	if a.showHelp {
 		a.drawHelpOverlay(screen)
+	}
+
+	// Draw confirmation dialog if active (last thing drawn, on top of everything)
+	if a.confirmDialog != nil {
+		a.drawConfirmDialog(screen)
 	}
 }
 
@@ -925,6 +1017,36 @@ func (a *App) drawHelpOverlay(screen *ebiten.Image) {
 
 	// Close hint
 	ebitenutil.DebugPrintAt(screen, "Press F1 or ? to close", overlayX+120, overlayY+overlayHeight-25)
+}
+
+// drawConfirmDialog draws a centered confirmation dialog overlay.
+func (a *App) drawConfirmDialog(screen *ebiten.Image) {
+	screenWidth, screenHeight := screen.Size()
+
+	overlayWidth := 340
+	overlayHeight := 80
+	overlayX := (screenWidth - overlayWidth) / 2
+	overlayY := (screenHeight - overlayHeight) / 2
+
+	// Draw background
+	overlayImg := ebiten.NewImage(overlayWidth, overlayHeight)
+	overlayImg.Fill(color.RGBA{40, 40, 50, 240})
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(overlayX), float64(overlayY))
+	screen.DrawImage(overlayImg, op)
+
+	// Draw border
+	borderColor := color.RGBA{200, 160, 60, 255}
+	ebitenutil.DrawRect(screen, float64(overlayX), float64(overlayY), float64(overlayWidth), 2, borderColor)
+	ebitenutil.DrawRect(screen, float64(overlayX), float64(overlayY+overlayHeight-2), float64(overlayWidth), 2, borderColor)
+	ebitenutil.DrawRect(screen, float64(overlayX), float64(overlayY), 2, float64(overlayHeight), borderColor)
+	ebitenutil.DrawRect(screen, float64(overlayX+overlayWidth-2), float64(overlayY), 2, float64(overlayHeight), borderColor)
+
+	// Draw message
+	ebitenutil.DebugPrintAt(screen, a.confirmDialog.Message, overlayX+20, overlayY+20)
+
+	// Draw hint
+	ebitenutil.DebugPrintAt(screen, "Y / Enter: Yes    N / Escape: No", overlayX+40, overlayY+50)
 }
 
 // drawMinimap draws a small overview of the level in the corner.
