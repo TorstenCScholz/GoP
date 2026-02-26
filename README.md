@@ -97,13 +97,27 @@ assets/            # Source art and level JSON
 docs/              # Design and architecture docs
 ```
 
-## Editor Notes
+## Editor
 
 The editor supports painting/erasing/fill/select/object placement, undo/redo, validation, and playtest mode.
 
 - Press `P` in the editor to enter playtest.
 - Press `Escape` to return from playtest to editing.
 - Press `R` during playtest to restart.
+
+### Screenshots
+
+**Tile Mode**
+
+![Editor - Tile Mode](docs/editor_2026-02-26.png)
+
+**Collision Mode**
+
+![Editor - Collision Mode](docs/editor_collision_2026-02-26.png)
+
+**Playtest Mode**
+
+![Editor - Playtest](docs/editor_playtest_2026-02-26.png)
 
 ## Architecture Highlights
 
